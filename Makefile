@@ -36,7 +36,8 @@ lint-diff:
 
 proto:
 	@echo "--> Running protoc"
-	@pushd pkg && protoc api/*.proto --go_out=plugins=grpc:. && popd
+	@protoc -I vendor/github.com/drausin/libri/libri/librarian/api -I pkg/api courier.proto \
+	--go_out=plugins=grpc:pkg/api
 
 test:
 	@echo "--> Running go test"

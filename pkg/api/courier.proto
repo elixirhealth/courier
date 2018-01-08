@@ -2,7 +2,19 @@ syntax = "proto3";
 
 package api;
 
-import "api/documents.proto";
+
+// Use vendored libridocuments.proto definitions directly. This compiles fine when the libri api
+// dir is included in the protoc command, but GoLand doesn't know about that dir and so can't find
+// the Document message type definitions. During development, you can eliminate these errors by
+// directly importing via
+//
+//import "../vendor/github.com/drausin/libri/libri/librarian/api/documents.proto";
+//
+// but the protoc build will fail with:
+//
+//  "Backslashes, consecutive slashes, ".", or ".." are not allowed in the virtual path"
+//
+import "documents.proto";
 
 service Courier {
 
