@@ -4,10 +4,10 @@ package cache
 // storage layer works.
 type Cache interface {
 
-	// put stores the marshaled document value at the hex of its key.
+	// Put stores the marshaled document value at the hex of its key.
 	Put(key string, value []byte) error
 
-	// get retrieves the marshaled document value of the given hex key.
+	// Get retrieves the marshaled document value of the given hex key.
 	Get(key string) ([]byte, error)
 
 	// TODO (drausin) eviction
