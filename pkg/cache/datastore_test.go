@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -118,15 +119,27 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 func TestDatastoreCache_Get_err(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
 
-	// doc get error
+	// missing doc error
 	ds := &datastoreCache{
 		client: &fixedDatastoreClient{
-			getErr: errors.New("some get error"),
+			getErr: datastore.ErrNoSuchEntity,
 		},
 		accessRecorder: &fixedAccessRecorder{},
 	}
 	key := fmt.Sprintf("%x", util.RandBytes(rng, id.Length))
 	docBytes, err := ds.Get(key)
+	assert.Equal(t, ErrMissingValue, err)
+	assert.Nil(t, docBytes)
+
+	// other doc get error
+	ds = &datastoreCache{
+		client: &fixedDatastoreClient{
+			getErr: errors.New("some get error"),
+		},
+		accessRecorder: &fixedAccessRecorder{},
+	}
+	key = fmt.Sprintf("%x", util.RandBytes(rng, id.Length))
+	docBytes, err = ds.Get(key)
 	assert.NotNil(t, err)
 	assert.Nil(t, docBytes)
 
@@ -146,14 +159,46 @@ func TestDatastoreCache_Get_err(t *testing.T) {
 	assert.Nil(t, docBytes)
 }
 
+func TestDatastoreCache_EvictNext_ok(t *testing.T) {
+	dsClient := &fixedDatastoreClient{}
+	evictionKeys := []string{"key1", "key2"}
+	dc := &datastoreCache{
+		client: dsClient,
+		accessRecorder: &fixedAccessRecorder{
+			nextEvictions: evictionKeys,
+		},
+	}
+	err := dc.EvictNext()
+	assert.Nil(t, err)
+	expectedDeleteKeys := []*datastore.Key{
+		datastore.NameKey(documentKind, "key1", nil),
+		datastore.NameKey(documentKind, "key2", nil),
+	}
+	assert.Equal(t, expectedDeleteKeys, dsClient.deleteKeys)
+}
+
+func TestDatastoreCache_EvictNext_err(t *testing.T) {
+	dsClient := &fixedDatastoreClient{}
+	dc := &datastoreCache{
+		client: dsClient,
+		accessRecorder: &fixedAccessRecorder{
+			getEvictionBatchErr: errors.New("some getEvictionBatch error"),
+		},
+	}
+	err := dc.EvictNext()
+	assert.NotNil(t, err)
+}
+
 func TestDatastoreAccessRecorder_CachePut_ok(t *testing.T) {
 	dsClient := &fixedDatastoreClient{}
-	ds := datastoreAccessRecorder{client: dsClient}
+	ds := &datastoreAccessRecorder{client: dsClient}
 	err := ds.CachePut("some key")
 	assert.Nil(t, err)
+	assert.NotZero(t, dsClient.value.(*AccessRecord).CachePutDateEarliest)
 	assert.NotZero(t, dsClient.value.(*AccessRecord).CachePutTimeEarliest)
 	assert.Zero(t, dsClient.value.(*AccessRecord).LibriPutTimeEarliest)
 	assert.Zero(t, dsClient.value.(*AccessRecord).CacheGetTimeLatest)
+	assert.False(t, dsClient.value.(*AccessRecord).LibriPutOccurred)
 
 	// second put should be no-op
 	err = ds.CachePut("some key")
@@ -197,7 +242,52 @@ func TestDatastoreAccessRecorder_LibriPut(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotZero(t, dsClient.value.(*AccessRecord).CachePutTimeEarliest)
 	assert.NotZero(t, dsClient.value.(*AccessRecord).LibriPutTimeEarliest)
+	assert.True(t, dsClient.value.(*AccessRecord).LibriPutOccurred)
 	assert.Zero(t, dsClient.value.(*AccessRecord).CacheGetTimeLatest)
+}
+
+func TestDatastoreAccessRecorder_CacheEvict(t *testing.T) {
+	dsClient := &fixedDatastoreClient{}
+	ds := datastoreAccessRecorder{client: dsClient}
+	keyNames := []string{"key1", "key2"}
+	err := ds.CacheEvict(keyNames)
+	assert.Nil(t, err)
+	expectedDeleteKeys := []*datastore.Key{
+		datastore.NameKey(accessRecordKind, "key1", nil),
+		datastore.NameKey(accessRecordKind, "key2", nil),
+	}
+	assert.Equal(t, expectedDeleteKeys, dsClient.deleteKeys)
+}
+
+func TestDatastoreAccessRecorder_GetNextEvictions_ok(t *testing.T) {
+	dsKeys := []*datastore.Key{
+		datastore.NameKey(accessRecordKind, "key1", nil),
+		datastore.NameKey(accessRecordKind, "key2", nil),
+	}
+	dsClient := &fixedDatastoreClient{
+		queryAllKeysResult: dsKeys,
+	}
+	ds := datastoreAccessRecorder{
+		client: dsClient,
+		params: &Parameters{RecentWindow: 24 * time.Hour},
+	}
+	expected := []string{"key1", "key2"}
+	keys, err := ds.GetNextEvictions()
+	assert.Nil(t, err)
+	assert.Equal(t, expected, keys)
+}
+
+func TestDatastoreAccessRecorder_GetNextEvictions_err(t *testing.T) {
+	dsClient := &fixedDatastoreClient{
+		queryAllKeysErr: errors.New("some queryAllKeys error"),
+	}
+	ds := datastoreAccessRecorder{
+		client: dsClient,
+		params: &Parameters{RecentWindow: 24 * time.Hour},
+	}
+	keys, err := ds.GetNextEvictions()
+	assert.NotNil(t, err)
+	assert.Nil(t, keys)
 }
 
 func TestDatastoreAccessRecorder_update_err(t *testing.T) {
@@ -256,9 +346,13 @@ func TestSplitJoinValue(t *testing.T) {
 }
 
 type fixedDatastoreClient struct {
-	value  interface{}
-	getErr error
-	putErr error
+	value              interface{}
+	getErr             error
+	putErr             error
+	deleteErr          error
+	deleteKeys         []*datastore.Key
+	queryAllKeysResult []*datastore.Key
+	queryAllKeysErr    error
 }
 
 func (f *fixedDatastoreClient) put(key *datastore.Key, value interface{}) (*datastore.Key, error) {
@@ -277,8 +371,10 @@ func (f *fixedDatastoreClient) get(key *datastore.Key, dest interface{}) error {
 		return datastore.ErrNoSuchEntity
 	} else if key.Kind == accessRecordKind {
 		dest.(*AccessRecord).CacheGetTimeLatest = f.value.(*AccessRecord).CacheGetTimeLatest
-		dest.(*AccessRecord).CachePutTimeEarliest = f.value.(*AccessRecord).CachePutTimeEarliest
-		dest.(*AccessRecord).LibriPutTimeEarliest = f.value.(*AccessRecord).LibriPutTimeEarliest
+		dest.(*AccessRecord).CachePutTimeEarliest =
+			f.value.(*AccessRecord).CachePutTimeEarliest
+		dest.(*AccessRecord).LibriPutTimeEarliest =
+			f.value.(*AccessRecord).LibriPutTimeEarliest
 	} else if key.Kind == documentKind {
 		dest.(*MarshaledDocument).ValuePart1 = f.value.(*MarshaledDocument).ValuePart1
 		dest.(*MarshaledDocument).ValuePart2 = f.value.(*MarshaledDocument).ValuePart2
@@ -287,10 +383,25 @@ func (f *fixedDatastoreClient) get(key *datastore.Key, dest interface{}) error {
 	return nil
 }
 
+func (f *fixedDatastoreClient) delete(keys []*datastore.Key) error {
+	f.value = nil
+	f.deleteKeys = keys
+	return f.deleteErr
+}
+
+func (f *fixedDatastoreClient) queryAllKeys(
+	ctx context.Context, q *datastore.Query,
+) ([]*datastore.Key, error) {
+	return f.queryAllKeysResult, f.queryAllKeysErr
+}
+
 type fixedAccessRecorder struct {
-	cachePutErr error
-	cacheGetErr error
-	libriPutErr error
+	cachePutErr         error
+	cacheGetErr         error
+	cacheEvict          error
+	libriPutErr         error
+	nextEvictions       []string
+	getEvictionBatchErr error
 }
 
 func (r *fixedAccessRecorder) CachePut(key string) error {
@@ -301,6 +412,14 @@ func (r *fixedAccessRecorder) CacheGet(key string) error {
 	return r.cacheGetErr
 }
 
+func (r *fixedAccessRecorder) CacheEvict(keys []string) error {
+	return r.cacheEvict
+}
+
 func (r *fixedAccessRecorder) LibriPut(key string) error {
 	return r.libriPutErr
+}
+
+func (r *fixedAccessRecorder) GetNextEvictions() ([]string, error) {
+	return r.nextEvictions, r.getEvictionBatchErr
 }

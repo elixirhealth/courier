@@ -242,11 +242,13 @@ func TestCourier_Get_err(t *testing.T) {
 }
 
 type fixedCache struct {
-	putKey string
-	putErr error
-	getKey string
-	getErr error
-	value  []byte
+	putKey       string
+	putErr       error
+	getKey       string
+	getErr       error
+	evictErr     error
+	evictNexterr error
+	value        []byte
 }
 
 func (f *fixedCache) Put(key string, value []byte) error {
@@ -261,6 +263,14 @@ func (f *fixedCache) Get(key string) ([]byte, error) {
 		return nil, f.getErr
 	}
 	return f.value, nil
+}
+
+func (f *fixedCache) Evict(key string) error {
+	return f.evictErr
+}
+
+func (f *fixedCache) EvictNext() error {
+	return f.evictNexterr
 }
 
 type fixedAcquirer struct {
