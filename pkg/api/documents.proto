@@ -1,0 +1,169 @@
+syntax = "proto3";
+
+package api;
+
+// Document contains either an Envelope, Entry, or Page message.
+message Document {
+    oneof contents {
+        Envelope envelope = 1;
+        Entry entry = 2;
+        Page page = 3;
+    }
+}
+
+// Envelope defines the public keys an author uses to share an entry encryption key with a
+// particular reader. The shared ECDH secret is used with a key derivation function to generate the
+// key encryption key (KEK), which contains 2 sub-keys:
+// 1) 32-byte AES-256 key, used for encrypting/decrypting the entry encryption key (EEK)
+// 2) 12-byte EEK block cipher initialization vector
+// 3) 32-byte HMAC-256 key, used for EEK MAC
+//
+// This AES-256 EEK is then used to decrypt the EEK ciphertext, which contains 4 sub-keys:
+// 1) 32-byte AES-256 key, used to enrypt Pages and Entry metadata
+// 2) 32-byte Page initialization vector (IV) seed
+// 3) 32-byte HMAC-256 key
+// 4) 12-byte metadata block cipher initialization vector
+message Envelope {
+
+    // 32-byte key of the Entry whose encryption keys are being sent
+    bytes entry_key = 1;
+
+    // ECDH public key of the entry author/sender
+    bytes author_public_key = 2;
+
+    // ECDH public key of the entry reader/recipient
+    bytes reader_public_key = 3;
+
+    // ciphertext of 108-byte entry encryption key (EEK), encrypted with a KEK from the shared
+    // ECDH shared secret
+    bytes eek_ciphertext = 4;
+
+    // 32-byte MAC of the EEK
+    bytes eek_ciphertext_mac = 5;
+}
+
+// Entry is the main unit of cache in the Libri network.
+message Entry {
+
+    // ECDSA public key of the entry author
+    bytes author_public_key = 1;
+
+    // single-page contents of the entry, set when page_keys is not set
+    Page page = 2;
+
+    // multi-page contents of the entry, set when page is not set
+    repeated bytes page_keys = 3;
+
+    // created epoch time (seconds since 1970-01-01)
+    uint32 created_time = 4;
+
+    // ciphertext of marshalled EntryMetadata message properties
+    bytes metadata_ciphertext = 5;
+
+    // 32-byte MAC of metatadata ciphertext, encrypted with the 32-byte Entry AES-256 key and
+    // 12-byte metadata block cipher IV
+    bytes metadata_ciphertext_mac = 6;
+}
+
+// EntryMetadata contains metadata for an entry.
+message EntryMetadata {
+
+    // media/MIME type of the data
+    string media_type = 1;
+
+    // codec used to compress the data
+    CompressionCodec compression_codec = 2;
+
+    // total ciphertext size across all pages
+    uint64 ciphertext_size = 3;
+
+    // MAC of the entire ciphertext
+    bytes ciphertext_mac = 4;
+
+    // total size of the entire uncompressed entry
+    uint64 uncompressed_size = 5;
+
+    // MAC of the entire uncompressed entry
+    bytes uncompressed_mac = 6;
+
+    // -----------------------------
+    // properties below are optional
+    // -----------------------------
+
+    // domain-specific metadata
+    map<string, bytes> properties = 7;
+
+    // (relative) filepath of the data contained in the entry
+    string filepath = 8;
+
+    // schema of the entry plaintext
+    SchemaArtifact schema = 9;
+
+    // data dictionary of the entry plaintext
+    SchemaArtifact dataDictionary = 10;
+}
+
+// CompressionCodec denotes whether and how the plaintext is compressed before encryption.
+enum CompressionCodec {
+    NONE = 0;
+    GZIP = 1;
+}
+
+// SchemaArtifact denotes the schema artifact associated with the serialized plaintext of a
+// particular entry. Artifacts can mainly be two separate types:
+//
+// - schema: can be of any type (e.g., proto, avro, json, XML, XSD, etc) that minimally describe the
+// format of the data and optionally/preferably also include the data dictionary (i.e., the
+// semantic meaning of the schema components) as well.
+//
+// - data dictionary: when the schema is broad/loose (as is the case in some standard data formats
+// like HL7), this additional documentation adds clarity about the semantic meaning/use of each
+// field. For example, a schema may contain two similar fields, A1 and A2, and one entry
+// data producer may store a value in A1, whereas another producer may store the same semantic
+// value in A2. The schema for both messages is the same, but the schema interpretation is
+// different.
+//
+// New schemas should obviously be as well-defined and unambiguous as possible, but many legacy
+// data formats require additional interpretation. Clients can choose to do what they want with
+// the schema and data dictionary, but commonly they will have combinations of these that they
+// know how to handle explicitly.
+//
+// Preferred formats:
+//  - schema: Protobuf
+//  - data dictionary: Markdown
+//
+message SchemaArtifact {
+
+    // group owning the schema (commonly a Github user, e.g., 'drausin')
+    string group = 1;
+
+    // project in which schema resides (commonly a Github project, e.g., 'libri')
+    string project = 2;
+
+    // path to schema file within project (e.g., 'libri/librarian/api/documents.proto')
+    string path = 3;
+
+    // (optional) name of schema within file (e.g., 'EntrySchema')
+    string name = 4;
+
+    // version of schema (commonly a semver tag, e.g., '0.1.0')
+    string version = 5;
+}
+
+// Page is a portion (possibly all) of an Entry document.
+message Page {
+
+    // ECDSA public key of the entry author
+    bytes author_public_key = 1;
+
+    // index of Page within Entry contents
+    uint32 index = 2;
+
+    // ciphertext of Page contents, encrypted using the 32-byte AES-256 key with the block cipher
+    // initialized by the first 12 bytes of HMAC-256(IV seed, page index)
+    bytes ciphertext = 3;
+
+    // 32-byte MAC of ciphertext using the 32-byte Page ciphertext HMAC-256 key
+    bytes ciphertext_mac = 4;
+
+}
