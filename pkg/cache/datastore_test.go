@@ -1,15 +1,16 @@
 package cache
 
 import (
-	"testing"
-	"github.com/elxirhealth/courier/pkg/util"
-	"math/rand"
-	"github.com/stretchr/testify/assert"
-	"cloud.google.com/go/datastore"
-	"time"
 	"errors"
 	"fmt"
+	"math/rand"
+	"testing"
+	"time"
+
+	"cloud.google.com/go/datastore"
 	"github.com/drausin/libri/libri/common/id"
+	"github.com/elxirhealth/courier/pkg/util"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDatastoreCache_PutGet_ok(t *testing.T) {
@@ -303,4 +304,3 @@ func (r *fixedAccessRecorder) CacheGet(key string) error {
 func (r *fixedAccessRecorder) LibriPut(key string) error {
 	return r.libriPutErr
 }
-

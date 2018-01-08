@@ -1,11 +1,12 @@
 package cache
 
 import (
-	"cloud.google.com/go/datastore"
+	"bytes"
 	"context"
 	"errors"
 	"time"
-	"bytes"
+
+	"cloud.google.com/go/datastore"
 	"github.com/drausin/libri/libri/common/id"
 )
 
@@ -60,7 +61,7 @@ func NewDatastore(gcpProjectID string) (Cache, error) {
 	}
 	wrappedClient := &datastoreClientImpl{client}
 	return &datastoreCache{
-		client: wrappedClient,
+		client:         wrappedClient,
 		accessRecorder: &datastoreAccessRecorder{wrappedClient},
 	}, nil
 }
@@ -185,7 +186,7 @@ func splitValue(value []byte) (*MarshaledDocument, error) {
 	if len(value) <= 3*maxValuePartSize {
 		return &MarshaledDocument{
 			ValuePart1: value[:maxValuePartSize],
-			ValuePart2: value[maxValuePartSize:2*maxValuePartSize],
+			ValuePart2: value[maxValuePartSize : 2*maxValuePartSize],
 			ValuePart3: value[2*maxValuePartSize:],
 		}, nil
 	}
