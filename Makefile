@@ -10,6 +10,10 @@ GIT_DIFF_PKG_SUBDIRS=$(shell echo $(PKG_SUBDIRS) $(GIT_DIFF_SUBDIRS) | tr " " "\
 
 .PHONY: bench build
 
+build:
+	@echo "--> Running go build"
+	@go build $(PKGS)
+
 fix:
 	@echo "--> Running goimports"
 	@find . -name *.go | grep -v /vendor/ | xargs goimports -l -w
