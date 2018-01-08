@@ -1,0 +1,20 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/golang:1.9
+    parallelism: 1
+    working_directory: /go/src/github.com/elxirhealth/courier
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-vendor-{{ arch }}-{{ checksum "Gopkg.lock" }}
+      - run: make get-deps
+      - save_cache:
+          key: v1-vendor-{{ arch }}-{{ checksum "Gopkg.lock" }}
+          paths:
+            - vendor
+      - run: make build
+      - run: make test
+      - run: make lint
