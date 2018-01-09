@@ -1,9 +1,9 @@
 syntax = "proto3";
 
-package api;
+package courierapi;
 
 
-// Use vendored libridocuments.proto definitions directly. This compiles fine when the libri api
+// Use vendored libridocuments.proto definitions directly. This compiles fine when the vendor/
 // dir is included in the protoc command, but GoLand doesn't know about that dir and so can't find
 // the Document message type definitions. During development, you can eliminate these errors by
 // directly importing via
@@ -14,15 +14,15 @@ package api;
 //
 //  "Backslashes, consecutive slashes, ".", or ".." are not allowed in the virtual path"
 //
-import "documents.proto";
+import "github.com/drausin/libri/libri/librarian/api/documents.proto";
 
 service Courier {
 
-    // Get retrieves a value from the cache or libri network, if it exists.
-    rpc Get (GetRequest) returns (GetResponse) {}
-
     // Put puts a value into the cache and libri network.
     rpc Put (PutRequest) returns (PutResponse) {}
+
+    // Get retrieves a value from the cache or libri network, if it exists.
+    rpc Get (GetRequest) returns (GetResponse) {}
 
 }
 
@@ -33,7 +33,7 @@ message GetRequest {
 
 message GetResponse {
     // value is the document value
-    Document value = 1;
+    api.Document value = 1;
 }
 
 message PutRequest {
@@ -41,7 +41,7 @@ message PutRequest {
     bytes key = 1;
 
     // value is the document value
-    Document value = 2;
+    api.Document value = 2;
 }
 
 message PutResponse {

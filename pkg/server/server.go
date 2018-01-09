@@ -1,17 +1,18 @@
 package server
 
 import (
-	"github.com/elxirhealth/courier/pkg/api"
-	"context"
-	"github.com/elxirhealth/courier/pkg/cache"
-	"github.com/drausin/libri/libri/common/id"
-	"github.com/golang/protobuf/proto"
-	"github.com/drausin/libri/libri/common/ecid"
-	"github.com/drausin/libri/libri/author/io/publish"
-	lapi "github.com/drausin/libri/libri/librarian/api"
-	"errors"
-	"github.com/elxirhealth/courier/pkg/util"
 	"bytes"
+	"context"
+	"errors"
+
+	"github.com/drausin/libri/libri/author/io/publish"
+	"github.com/drausin/libri/libri/common/ecid"
+	"github.com/drausin/libri/libri/common/id"
+	libriapi "github.com/drausin/libri/libri/librarian/api"
+	"github.com/elxirhealth/courier/pkg/cache"
+	api "github.com/elxirhealth/courier/pkg/courierapi"
+	"github.com/elxirhealth/courier/pkg/util"
+	"github.com/golang/protobuf/proto"
 )
 
 var (
@@ -19,14 +20,14 @@ var (
 
 	ErrExistingNotEqualNewDocument = errors.New("existing does not equal new document")
 
-	ErrFullPutQueue = errors.New("full Put queue")
+	ErrFullLibriPutQueue = errors.New("full libri Put queue")
 )
 
 type courier struct {
 	clientID  ecid.ID
 	cache     cache.Cache
-	getter    lapi.Getter
-	putter    lapi.Putter
+	getter    libriapi.Getter
+	putter    libriapi.Putter
 	acquirer  publish.Acquirer
 	publisher publish.Publisher
 	toPut     chan string
@@ -38,53 +39,21 @@ type courier struct {
 	// logger
 }
 
-func (c *courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse, error) {
-	// validate request
-
-	docKey := id.FromBytes(rq.Key)
-	docBytes, err := c.cache.Get(docKey.String());
-	if err != nil && err != cache.ErrMissingValue {
-		// unexpected error
-		return nil, err
-	}
-	if err == nil {
-		// cache has doc
-		doc := &lapi.Document{}
-		if err := proto.Unmarshal(docBytes, doc); err != nil {
-			return nil, err
-		}
-		return &api.GetResponse{Value: doc}, nil
-	}
-
-	// cache doesn't have value, so try to get it from libri
-	doc, err := c.acquirer.Acquire(docKey, nil, c.getter)
-	if err != nil && err != api.ErrMissingDocument {
-		return nil, err
-	}
-	if err == api.ErrMissingDocument {
-		return nil, ErrDocumentNotFound
-	}
-	docBytes, err = proto.Marshal(doc)
-	util.MaybePanic(err) // should never happen since we just unmarshaled from wire
-	if err = c.cache.Put(docKey.String(), docBytes); err != nil {
-		return nil, err
-	}
-	return &api.GetResponse{Value: doc}, nil
-}
-
 func (c *courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse, error) {
-	// validate request
+	if err := api.ValidatePutRequest(rq); err != nil {
+		return nil, err
+	}
+	docKey := id.FromBytes(rq.Key)
 
 	// check cache for value
-	docKey := id.FromBytes(rq.Key)
-	cachedDocBytes, err := c.cache.Get(docKey.String());
+	cachedDocBytes, err := c.cache.Get(docKey.String())
 	if err != nil && err != cache.ErrMissingValue {
 		// unexpected error
 		return nil, err
 	}
-	newDocBytes, err := proto.Marshal((*lapi.Document)(rq.Value))
+	newDocBytes, err := proto.Marshal(rq.Value)
 	util.MaybePanic(err) // should never happen since we just unmarshaled from wire
-	if err == nil {
+	if cachedDocBytes != nil {
 		// cache has doc
 		if !bytes.Equal(newDocBytes, cachedDocBytes) {
 			return nil, ErrExistingNotEqualNewDocument
@@ -100,6 +69,44 @@ func (c *courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 	case c.toPut <- docKey.String():
 		return &api.PutResponse{Operation: api.PutOperation_STORED}, nil
 	default:
-		return nil, ErrFullPutQueue
+		return nil, ErrFullLibriPutQueue
 	}
+}
+
+func (c *courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse, error) {
+	if err := api.ValidateGetRequest(rq); err != nil {
+		return nil, err
+	}
+
+	docKey := id.FromBytes(rq.Key)
+	docBytes, err := c.cache.Get(docKey.String())
+	if err != nil && err != cache.ErrMissingValue {
+		// unexpected error
+		return nil, err
+	}
+	if err == nil {
+		// cache has doc
+		doc := &libriapi.Document{}
+		if err := proto.Unmarshal(docBytes, doc); err != nil {
+			return nil, err
+		}
+		return &api.GetResponse{Value: doc}, nil
+	}
+
+	// cache doesn't have value, so try to get it from libri
+	doc, err := c.acquirer.Acquire(docKey, nil, c.getter)
+	if err != nil && err != libriapi.ErrMissingDocument {
+		return nil, err
+	}
+	if err == libriapi.ErrMissingDocument {
+		return nil, ErrDocumentNotFound
+	}
+	docBytes, err = proto.Marshal(doc)
+	util.MaybePanic(err) // should never happen since we just unmarshaled from wire
+	if err = c.cache.Put(docKey.String(), docBytes); err != nil {
+		return nil, err
+	}
+	return &api.GetResponse{
+		Value: doc,
+	}, nil
 }
