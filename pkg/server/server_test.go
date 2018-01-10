@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"math/rand"
+	"net"
 	"testing"
 
 	"github.com/drausin/libri/libri/common/id"
@@ -13,6 +14,31 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestNewCourier_ok(t *testing.T) {
+	config := NewDefaultConfig()
+	c, err := NewCourier(config)
+	assert.Nil(t, err)
+	assert.NotNil(t, c.(*courier).clientID)
+	// assert.NotNil(t, c.(*courier).cache)  // TODO (drausin) add when have in-mem cache
+	assert.NotNil(t, c.(*courier).getter)
+	assert.NotNil(t, c.(*courier).acquirer)
+	assert.NotNil(t, c.(*courier).libriPutQueue)
+	assert.Equal(t, config, c.(*courier).config)
+}
+
+func TestNewCourier_err(t *testing.T) {
+	badConfigs := map[string]*Config{
+		"missing clientID file": NewDefaultConfig().WithClientIDFilepath("missing.der"),
+		"emptyProjectID":        NewDefaultConfig().WithCacheStorage(DataStore),
+		"empty librarian addrs": NewDefaultConfig().WithLibrarianAddrs([]*net.TCPAddr{}),
+	}
+	for desc, badConfig := range badConfigs {
+		c, err := NewCourier(badConfig)
+		assert.NotNil(t, err, desc)
+		assert.Nil(t, c)
+	}
+}
 
 func TestCourier_Put_ok(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
@@ -27,8 +53,8 @@ func TestCourier_Put_ok(t *testing.T) {
 	// when cache has value, Put request should leave existing
 	cc := &fixedCache{value: valueBytes}
 	c := &courier{
-		cache: cc,
-		toPut: make(chan string, 1),
+		cache:         cc,
+		libriPutQueue: make(chan string, 1),
 	}
 	rp, err := c.Put(context.Background(), rq)
 	assert.Nil(t, err)
@@ -36,11 +62,11 @@ func TestCourier_Put_ok(t *testing.T) {
 	assert.Equal(t, key.String(), cc.getKey)
 
 	// when cache doesn't have value, Put request should store in cache and add
-	// to toPut queue
+	// to libriPutQueue queue
 	cc = &fixedCache{getErr: cache.ErrMissingValue}
 	c = &courier{
-		cache: cc,
-		toPut: make(chan string, 1),
+		cache:         cc,
+		libriPutQueue: make(chan string, 1),
 	}
 	rp, err = c.Put(context.Background(), rq)
 	assert.Nil(t, err)
@@ -48,7 +74,7 @@ func TestCourier_Put_ok(t *testing.T) {
 	assert.Equal(t, key.String(), cc.getKey)
 	assert.Equal(t, key.String(), cc.putKey)
 	assert.Equal(t, valueBytes, cc.value)
-	toPutKey := <-c.toPut
+	toPutKey := <-c.libriPutQueue
 	assert.Equal(t, key.String(), toPutKey)
 }
 
@@ -97,7 +123,7 @@ func TestCourier_Put_err(t *testing.T) {
 				cache: &fixedCache{
 					getErr: cache.ErrMissingValue,
 				},
-				toPut: make(chan string), // no slack
+				libriPutQueue: make(chan string), // no slack
 			},
 			err: ErrFullLibriPutQueue,
 		},

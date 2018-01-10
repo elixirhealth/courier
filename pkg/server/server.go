@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"math/rand"
 
 	"github.com/drausin/libri/libri/author/io/publish"
 	"github.com/drausin/libri/libri/common/ecid"
 	"github.com/drausin/libri/libri/common/id"
 	libriapi "github.com/drausin/libri/libri/librarian/api"
+	"github.com/drausin/libri/libri/librarian/client"
 	"github.com/elxirhealth/courier/pkg/cache"
 	api "github.com/elxirhealth/courier/pkg/courierapi"
 	"github.com/elxirhealth/courier/pkg/util"
@@ -29,14 +31,14 @@ var (
 )
 
 type courier struct {
-	clientID  ecid.ID
-	cache     cache.Cache
-	getter    libriapi.Getter
-	putter    libriapi.Putter
-	acquirer  publish.Acquirer
-	publisher publish.Publisher
-	toPut     chan string
-	config    *Config
+	clientID ecid.ID
+	cache    cache.Cache
+	getter   libriapi.Getter
+	putter   libriapi.Putter
+	acquirer publish.Acquirer
+	// publisher publish.Publisher
+	libriPutQueue chan string
+	config        *Config
 	// stop chan
 	// stopped chan/boolean flag
 	// health server
@@ -44,6 +46,40 @@ type courier struct {
 	// logger
 }
 
+// NewCourier creates a new CourierServer from the given config.
+func NewCourier(config *Config) (api.CourierServer, error) {
+	clientID, err := getClientID(config)
+	if err != nil {
+		return nil, err
+	}
+	c, err := getCache(config)
+	if err != nil {
+		return nil, err
+	}
+	rng := rand.New(rand.NewSource(clientID.ID().Int().Int64()))
+	librarians, err := client.NewUniformBalancer(config.LibrarianAddrs, rng)
+	if err != nil {
+		return nil, err
+	}
+	getters := client.NewUniformGetterBalancer(librarians)
+	getter := client.NewRetryGetter(getters, true, config.LibriGetTimeout)
+	pubParams := &publish.Parameters{
+		PutTimeout: config.LibriPutTimeout,
+		GetTimeout: config.LibriGetTimeout,
+	}
+	acquirer := publish.NewAcquirer(clientID, client.NewSigner(clientID.Key()), pubParams)
+
+	return &courier{
+		clientID:      clientID,
+		cache:         c,
+		getter:        getter,
+		acquirer:      acquirer,
+		libriPutQueue: make(chan string, config.LibriPutQueueSize),
+		config:        config,
+	}, nil
+}
+
+// Put puts a value into the cache and libri network.
 func (c *courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse, error) {
 	if err := api.ValidatePutRequest(rq); err != nil {
 		return nil, err
@@ -72,13 +108,14 @@ func (c *courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 		return nil, err
 	}
 	select {
-	case c.toPut <- docKey.String():
+	case c.libriPutQueue <- docKey.String():
 		return &api.PutResponse{Operation: api.PutOperation_STORED}, nil
 	default:
 		return nil, ErrFullLibriPutQueue
 	}
 }
 
+// Get retrieves a value from the cache or libri network, if it exists.
 func (c *courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse, error) {
 	if err := api.ValidateGetRequest(rq); err != nil {
 		return nil, err
@@ -93,7 +130,7 @@ func (c *courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse
 	if err == nil {
 		// cache has doc
 		doc := &libriapi.Document{}
-		if err := proto.Unmarshal(docBytes, doc); err != nil {
+		if err = proto.Unmarshal(docBytes, doc); err != nil {
 			return nil, err
 		}
 		return &api.GetResponse{Value: doc}, nil
