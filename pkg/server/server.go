@@ -16,10 +16,15 @@ import (
 )
 
 var (
+	// ErrDocumentNotFound indicates when a document is found in neither the cache nor libri
+	// for a given key.
 	ErrDocumentNotFound = errors.New("document not found")
 
+	// ErrExistingNotEqualNewDocument indicates when existing cached document is not the same
+	// as the new document in a Put request.
 	ErrExistingNotEqualNewDocument = errors.New("existing does not equal new document")
 
+	// ErrFullLibriPutQueue indicates when the libri put queue is full.
 	ErrFullLibriPutQueue = errors.New("full libri Put queue")
 )
 
@@ -32,10 +37,10 @@ type courier struct {
 	publisher publish.Publisher
 	toPut     chan string
 	config    *Config
+	// stop chan
+	// stopped chan/boolean flag
 	// health server
 	// metrics server
-	// stop chan
-	// stopped chan
 	// logger
 }
 
@@ -56,6 +61,7 @@ func (c *courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 	if cachedDocBytes != nil {
 		// cache has doc
 		if !bytes.Equal(newDocBytes, cachedDocBytes) {
+			// *should* never happen, but check just in case
 			return nil, ErrExistingNotEqualNewDocument
 		}
 		return &api.PutResponse{Operation: api.PutOperation_LEFT_EXISTING}, nil

@@ -10,6 +10,7 @@ import (
 	"github.com/elxirhealth/courier/pkg/cache"
 	api "github.com/elxirhealth/courier/pkg/courierapi"
 	"github.com/golang/protobuf/proto"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -51,6 +52,70 @@ func TestCourier_Put_ok(t *testing.T) {
 	assert.Equal(t, key.String(), toPutKey)
 }
 
+func TestCourier_Put_err(t *testing.T) {
+	rng := rand.New(rand.NewSource(0))
+	value, key := libriapi.NewTestDocument(rng)
+	okRq := &api.PutRequest{
+		Key:   key.Bytes(),
+		Value: value,
+	}
+
+	cases := map[string]struct {
+		rq  *api.PutRequest
+		c   *courier
+		err error
+	}{
+		"bad request": {
+			rq: &api.PutRequest{},
+			c:  &courier{},
+		},
+		"cache Get error": {
+			rq: okRq,
+			c: &courier{
+				cache: &fixedCache{getErr: errors.New("some Get error")},
+			},
+		},
+		"existing not equal new doc": {
+			rq: okRq,
+			c: &courier{
+				cache: &fixedCache{value: []byte{1, 2, 3, 4}},
+			},
+			err: ErrExistingNotEqualNewDocument,
+		},
+		"cache Put error": {
+			rq: okRq,
+			c: &courier{
+				cache: &fixedCache{
+					getErr: cache.ErrMissingValue,
+					putErr: errors.New("some Put error"),
+				},
+			},
+		},
+		"full Libri put queue": {
+			rq: okRq,
+			c: &courier{
+				cache: &fixedCache{
+					getErr: cache.ErrMissingValue,
+				},
+				toPut: make(chan string), // no slack
+			},
+			err: ErrFullLibriPutQueue,
+		},
+	}
+
+	for desc, c := range cases {
+		rp, err := c.c.Put(context.Background(), c.rq)
+		assert.Nil(t, rp, desc)
+		if c.err != nil {
+			// specific error
+			assert.Equal(t, c.err, err, desc)
+		} else {
+			// non-nil error
+			assert.NotNil(t, err, desc)
+		}
+	}
+}
+
 func TestCourier_Get_ok(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
 	value, key := libriapi.NewTestDocument(rng)
@@ -82,6 +147,72 @@ func TestCourier_Get_ok(t *testing.T) {
 	assert.Equal(t, key.String(), cc.putKey)
 	assert.Equal(t, valueBytes, cc.value)
 	assert.Equal(t, key, acq.docKey)
+}
+
+func TestCourier_Get_err(t *testing.T) {
+	rng := rand.New(rand.NewSource(0))
+	value, key := libriapi.NewTestDocument(rng)
+	okRq := &api.GetRequest{
+		Key: key.Bytes(),
+	}
+	cases := map[string]struct {
+		rq  *api.GetRequest
+		c   *courier
+		err error
+	}{
+		"bad request": {
+			rq: &api.GetRequest{},
+			c:  &courier{},
+		},
+		"cache Get error": {
+			rq: okRq,
+			c: &courier{
+				cache: &fixedCache{getErr: errors.New("some Get error")},
+			},
+		},
+		"bad marshaled doc": {
+			rq: okRq,
+			c: &courier{
+				cache: &fixedCache{value: []byte{1, 2, 3, 4}},
+			},
+		},
+		"acquirer Acquire error": {
+			rq: okRq,
+			c: &courier{
+				cache:    &fixedCache{getErr: cache.ErrMissingValue},
+				acquirer: &fixedAcquirer{err: errors.New("some Acquire error")},
+			},
+		},
+		"acquirer Acquire missing doc": {
+			rq: okRq,
+			c: &courier{
+				cache:    &fixedCache{getErr: cache.ErrMissingValue},
+				acquirer: &fixedAcquirer{err: libriapi.ErrMissingDocument},
+			},
+		},
+		"cache Put error": {
+			rq: okRq,
+			c: &courier{
+				cache: &fixedCache{
+					getErr: cache.ErrMissingValue,
+					putErr: errors.New("some Put error"),
+				},
+				acquirer: &fixedAcquirer{doc: value},
+			},
+		},
+	}
+
+	for desc, c := range cases {
+		rp, err := c.c.Get(context.Background(), c.rq)
+		assert.Nil(t, rp, desc)
+		if c.err != nil {
+			// specific error
+			assert.Equal(t, c.err, err, desc)
+		} else {
+			// non-nil error
+			assert.NotNil(t, err, desc)
+		}
+	}
 }
 
 type fixedCache struct {
