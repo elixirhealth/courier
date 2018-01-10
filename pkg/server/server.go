@@ -34,7 +34,7 @@ type courier struct {
 	clientID ecid.ID
 	cache    cache.Cache
 	getter   libriapi.Getter
-	putter   libriapi.Putter
+	// putter   libriapi.Putter
 	acquirer publish.Acquirer
 	// publisher publish.Publisher
 	libriPutQueue chan string
