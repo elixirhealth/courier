@@ -3,15 +3,12 @@ package server
 import (
 	"github.com/drausin/libri/libri/common/ecid"
 	"github.com/elxirhealth/courier/pkg/cache"
-	"github.com/pkg/errors"
 )
 
 func getClientID(config *Config) (ecid.ID, error) {
 	if config.ClientIDFilepath != "" {
-		// TODO (drausin)
-		return nil, errors.New("not implemented")
+		return ecid.FromPrivateKeyFile(config.ClientIDFilepath)
 	}
-
 	return ecid.NewRandom(), nil
 }
 
