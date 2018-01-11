@@ -25,6 +25,10 @@ get-deps:
 	@go get -u -v $(GOTOOLS)
 	@gometalinter --install
 
+install-git-hooks:
+	@echo "--> Installing git-hooks"
+	@./scripts/install-git-hooks.sh
+
 lint:
 	@echo "--> Running gometalinter"
 	@gometalinter $(PKG_SUBDIRS) --config=.gometalinter.json --deadline=5m
@@ -36,7 +40,7 @@ lint-diff:
 
 proto:
 	@echo "--> Running protoc"
-	@pushd pkg && protoc api/*.proto --go_out=plugins=grpc:. && popd
+	@protoc pkg/courierapi/courier.proto -I. -I vendor/ --go_out=plugins=grpc:.
 
 test:
 	@echo "--> Running go test"

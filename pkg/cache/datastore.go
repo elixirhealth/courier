@@ -18,6 +18,9 @@ const (
 )
 
 var (
+	// ErrMissingValue indicates that a value is missing for a given key.
+	ErrMissingValue = errors.New("missing value")
+
 	// ErrInvalidKeySize indicates when the key is not the expected length.
 	ErrInvalidKeySize = errors.New("invalid key size")
 
@@ -99,6 +102,9 @@ func (c *datastoreCache) Get(key string) ([]byte, error) {
 	cacheKey := datastore.NameKey(documentKind, key, nil)
 	existingCacheValue := &MarshaledDocument{}
 	if err := c.client.get(cacheKey, existingCacheValue); err != nil {
+		if err == datastore.ErrNoSuchEntity {
+			return nil, ErrMissingValue
+		}
 		return nil, err
 	}
 	if err := c.accessRecorder.CacheGet(key); err != nil {

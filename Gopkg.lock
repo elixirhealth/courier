@@ -15,19 +15,62 @@
   version = "v0.17.0"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/btcsuite/btcd"
+  packages = ["btcec"]
+  revision = "2e60448ffcc6bf78332d1fe590260095f554dd78"
+
+[[projects]]
+  name = "github.com/cenkalti/backoff"
+  packages = ["."]
+  revision = "61153c768f31ee5f130071d08fc82b85208528de"
+  version = "v1.1.0"
+
+[[projects]]
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
   revision = "346938d642f2ec3594ed81d874461961cd0faa76"
   version = "v1.1.0"
 
 [[projects]]
+  name = "github.com/dgrijalva/jwt-go"
+  packages = ["."]
+  revision = "dbeaa9332f19a944acb5736b4456cfcc02140e29"
+  version = "v3.1.0"
+
+[[projects]]
   name = "github.com/drausin/libri"
   packages = [
+    "libri/author/io/publish",
+    "libri/common/db",
+    "libri/common/ecid",
     "libri/common/errors",
-    "libri/common/id"
+    "libri/common/id",
+    "libri/common/storage",
+    "libri/librarian/api",
+    "libri/librarian/client"
   ]
-  revision = "8aca73da761272a25a8c373a80550ac7e62fcb7d"
-  version = "v0.2.0"
+  revision = "df1347893b506c2eb64935347cf7c7a6ca928e9d"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/dustin/go-humanize"
+  packages = ["."]
+  revision = "bb3d318650d48840a39aa21a027c6630e198e626"
+
+[[projects]]
+  name = "github.com/ethereum/go-ethereum"
+  packages = [
+    "common",
+    "common/hexutil",
+    "common/math",
+    "crypto",
+    "crypto/secp256k1",
+    "crypto/sha3",
+    "rlp"
+  ]
+  revision = "4bb3c89d44e372e6a9ab85a8be0c9345265c763a"
+  version = "v1.7.3"
 
 [[projects]]
   branch = "master"
@@ -51,6 +94,21 @@
   version = "v2.0.0"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/hashicorp/golang-lru"
+  packages = [
+    ".",
+    "simplelru"
+  ]
+  revision = "0a025b7e63adc15a622f29b0b2c4c3848243bbf6"
+
+[[projects]]
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
+  version = "v0.8.0"
+
+[[projects]]
   name = "github.com/pmezard/go-difflib"
   packages = ["difflib"]
   revision = "792786c7400a136282c1664665ae0a8db921c6c2"
@@ -61,6 +119,11 @@
   packages = ["assert"]
   revision = "b91bfb9ebec76498946beb6af7c0230c7cc7ba6c"
   version = "v1.2.0"
+
+[[projects]]
+  name = "github.com/tecbot/gorocksdb"
+  packages = ["."]
+  revision = "57a309fefefb9c03d6dcc11a0e5705fc4711b46d"
 
 [[projects]]
   name = "go.uber.org/atomic"
@@ -100,7 +163,7 @@
     "lex/httplex",
     "trace"
   ]
-  revision = "42fe2e1c20de1054d3d30f82cc9fb5b41e2e3767"
+  revision = "434ec0c7fe3742c984919a691b2018a6e9694425"
 
 [[projects]]
   branch = "master"
@@ -146,7 +209,7 @@
     "option",
     "transport/grpc"
   ]
-  revision = "b1c0f9b3aa8fac163224fab909402d49c6dce50a"
+  revision = "af40bece8f577b6beb316373ad9d96e4720a567a"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -211,6 +274,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "232abb0de6280430fb00effa98a962eb7d80ab71aa894ed4aac093d797719113"
+  inputs-digest = "dc453bef964c431a2e25ae853e8468a61cb2ef35cfbd883ce35338a16dc9d5d7"
   solver-name = "gps-cdcl"
   solver-version = 1

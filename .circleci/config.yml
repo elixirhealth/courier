@@ -2,19 +2,30 @@ version: 2
 jobs:
   build:
     docker:
-      - image: circleci/golang:1.9
+      - image: daedalus2718/libri-build
     parallelism: 1
     working_directory: /go/src/github.com/elxirhealth/courier
     steps:
       - checkout
       - restore_cache:
           keys:
-            - v1-vendor-{{ arch }}-{{ checksum "Gopkg.lock" }}
+            - v1-vendor-{{ arch }}-{{ checksum "Gopkg.lock" }}-rdb5.8
       - run: make get-deps
+      - run:
+          name: install RocksDB
+          command: |
+            # hack to make sure RocksDB runs on CircleCI machines
+            if [[ $(md5sum /usr/local/lib/librocksdb.a | awk '{print $1}') != "bf2defef7ee3074d56ad8bdd6a26afa0" ]]; then
+              ./build/install-rocksdb.sh
+            fi
+      - run:
+          name: install gorocksdb
+          command: ./build/install-gorocksdb.sh
       - save_cache:
-          key: v1-vendor-{{ arch }}-{{ checksum "Gopkg.lock" }}
+          key: v1-vendor-{{ arch }}-{{ checksum "Gopkg.lock" }}-rdb5.8
           paths:
             - vendor
+            - /usr/local/lib/librocksdb.a
       - run: make build
       - run: make test
       - run: make lint
