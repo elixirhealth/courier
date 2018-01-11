@@ -15,6 +15,12 @@
   version = "v0.17.0"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/btcsuite/btcd"
+  packages = ["btcec"]
+  revision = "2e60448ffcc6bf78332d1fe590260095f554dd78"
+
+[[projects]]
   name = "github.com/cenkalti/backoff"
   packages = ["."]
   revision = "61153c768f31ee5f130071d08fc82b85208528de"
@@ -44,7 +50,7 @@
     "libri/librarian/api",
     "libri/librarian/client"
   ]
-  revision = "69264bc2196fa5cf6784bea38eeda5e1645f8078"
+  revision = "df1347893b506c2eb64935347cf7c7a6ca928e9d"
 
 [[projects]]
   branch = "master"
@@ -55,8 +61,13 @@
 [[projects]]
   name = "github.com/ethereum/go-ethereum"
   packages = [
+    "common",
+    "common/hexutil",
     "common/math",
-    "crypto/secp256k1"
+    "crypto",
+    "crypto/secp256k1",
+    "crypto/sha3",
+    "rlp"
   ]
   revision = "4bb3c89d44e372e6a9ab85a8be0c9345265c763a"
   version = "v1.7.3"
@@ -263,6 +274,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "af8b64bf6fca376a03dae7f2c5064d2fbb05738c0220c0b6eb98816cb8d29acc"
+  inputs-digest = "dc453bef964c431a2e25ae853e8468a61cb2ef35cfbd883ce35338a16dc9d5d7"
   solver-name = "gps-cdcl"
   solver-version = 1

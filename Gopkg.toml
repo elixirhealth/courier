@@ -26,7 +26,7 @@
 
 [[constraint]]
   name = "github.com/drausin/libri"
-  revision = "69264bc2196fa5cf6784bea38eeda5e1645f8078"
+  revision = "df1347893b506c2eb64935347cf7c7a6ca928e9d"
 
 [[constraint]]
   branch = "master"
