@@ -2,10 +2,16 @@ package cache
 
 import "time"
 
+const (
+	defaultReceptWindow         = time.Hour * 24 * 7
+	defaultEvictionBatchSize    = uint(100)
+	defaultEvictionPeriod       = 30 * time.Minute
+	defaultEvictionQueryTimeout = 5 * time.Second
+)
+
 // Cache stores documents in a quasi-LRU cache. Implementations of this interface define how the
 // storage layer works.
 type Cache interface {
-
 	// Put stores the marshaled document value at the hex of its key.
 	Put(key string, value []byte) error
 
@@ -18,7 +24,6 @@ type Cache interface {
 
 // AccessRecorder records put and get access to a particular document.
 type AccessRecorder interface {
-
 	// CachePut creates a new access record with the cache's put time for the document with
 	// the given key.
 	CachePut(key string) error
@@ -42,4 +47,14 @@ type Parameters struct {
 	EvictionBatchSize    uint
 	EvictionPeriod       time.Duration
 	EvictionQueryTimeout time.Duration
+}
+
+// NewDefaultParameters returns a new instance of default cache parameter values.
+func NewDefaultParameters() *Parameters {
+	return &Parameters{
+		RecentWindow:         defaultReceptWindow,
+		EvictionBatchSize:    defaultEvictionBatchSize,
+		EvictionPeriod:       defaultEvictionPeriod,
+		EvictionQueryTimeout: defaultEvictionQueryTimeout,
+	}
 }

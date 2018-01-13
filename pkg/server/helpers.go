@@ -13,8 +13,9 @@ func getClientID(config *Config) (ecid.ID, error) {
 }
 
 func getCache(config *Config) (cache.Cache, error) {
+	cacheParams := cache.NewDefaultParameters()
 	if config.CacheStorage == DataStore {
-		dsCache, err := cache.NewDatastore(config.GCPProjectID)
+		dsCache, err := cache.NewDatastore(config.GCPProjectID, cacheParams)
 		if err != nil {
 			return nil, err
 		}
