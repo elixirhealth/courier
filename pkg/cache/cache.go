@@ -2,8 +2,25 @@ package cache
 
 import "time"
 
+// StorageType indicates how the Cache is stored.
+type StorageType int
+
 const (
-	defaultReceptWindow         = time.Hour * 24 * 7
+	// Unspecified indicates when the storage type is not specified (and thus should take the
+	// default value).
+	Unspecified StorageType = iota
+
+	// InMemory indicates an ephemeral, in-memory (and thus not highly available) Cache. This
+	// storage layer should generally only be used during testing and not in production.
+	InMemory
+
+	// DataStore indicates a (highly available) Cache backed by GCP DataStore.
+	DataStore
+)
+
+const (
+	defaultStorage              = InMemory
+	defaultRecentWindow         = time.Hour * 24 * 7
 	defaultEvictionBatchSize    = uint(100)
 	defaultEvictionPeriod       = 30 * time.Minute
 	defaultEvictionQueryTimeout = 5 * time.Second
@@ -43,6 +60,7 @@ type AccessRecorder interface {
 
 // Parameters defines the parameters used by the cache implementation.
 type Parameters struct {
+	StorageType          StorageType
 	RecentWindow         time.Duration
 	EvictionBatchSize    uint
 	EvictionPeriod       time.Duration
@@ -52,7 +70,8 @@ type Parameters struct {
 // NewDefaultParameters returns a new instance of default cache parameter values.
 func NewDefaultParameters() *Parameters {
 	return &Parameters{
-		RecentWindow:         defaultReceptWindow,
+		StorageType:          defaultStorage,
+		RecentWindow:         defaultRecentWindow,
 		EvictionBatchSize:    defaultEvictionBatchSize,
 		EvictionPeriod:       defaultEvictionPeriod,
 		EvictionQueryTimeout: defaultEvictionQueryTimeout,

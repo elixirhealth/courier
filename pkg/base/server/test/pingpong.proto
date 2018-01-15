@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package test;
+
+// PingPong is a very simple service used only for tests.
+service PingPong {
+    rpc Ping (PingRequest) returns (PingResponse) {}
+}
+
+message PingRequest {
+    bool ping = 1;
+}
+
+message PingResponse {
+    bool pong = 1;
+}

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/elxirhealth/courier/pkg/cache"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -13,8 +14,8 @@ func TestNewDefaultConfig(t *testing.T) {
 	assert.NotEmpty(t, c.LibriGetTimeout)
 	assert.NotEmpty(t, c.LibriPutTimeout)
 	assert.NotEmpty(t, c.LibriPutQueueSize)
-	assert.NotEmpty(t, c.CacheStorage)
 	assert.NotEmpty(t, c.LibrarianAddrs)
+	assert.NotEmpty(t, c.Cache)
 }
 
 func TestConfig_WithLibriGetTimeout(t *testing.T) {
@@ -40,11 +41,17 @@ func TestConfig_WithLibriPutQueueSize(t *testing.T) {
 	assert.NotEqual(t, c1.LibriPutQueueSize, c3.WithLibriPutQueueSize(2).LibriPutQueueSize)
 }
 
-func TestConfig_WithCacheStorage(t *testing.T) {
+func TestConfig_WithCache(t *testing.T) {
 	c1, c2, c3 := &Config{}, &Config{}, &Config{}
-	c1.WithDefaultCacheStorage()
-	assert.Equal(t, c1.CacheStorage, c2.WithCacheStorage(Unspecified).CacheStorage)
-	assert.NotEqual(t, c1.CacheStorage, c3.WithCacheStorage(DataStore).CacheStorage)
+	c1.WithDefaultCache()
+	assert.Equal(t,
+		c1.Cache.StorageType,
+		c2.WithCache(&cache.Parameters{StorageType: cache.InMemory}).Cache.StorageType,
+	)
+	assert.NotEqual(t,
+		c1.Cache.StorageType,
+		c3.WithCache(&cache.Parameters{StorageType: cache.DataStore}).Cache.StorageType,
+	)
 }
 
 func TestConfig_WithBootstrapAddrs(t *testing.T) {

@@ -13,15 +13,14 @@ func getClientID(config *Config) (ecid.ID, error) {
 }
 
 func getCache(config *Config) (cache.Cache, error) {
-	cacheParams := cache.NewDefaultParameters()
-	if config.CacheStorage == DataStore {
-		dsCache, err := cache.NewDatastore(config.GCPProjectID, cacheParams)
+	if config.Cache.StorageType == cache.DataStore {
+		dsCache, err := cache.NewDatastore(config.GCPProjectID, config.Cache)
 		if err != nil {
 			return nil, err
 		}
 		return dsCache, nil
 	}
 
-	// TODO (drausin) add default in-memory cache
+	// TODO (drausin) add default in-memory Cache
 	return nil, nil
 }
