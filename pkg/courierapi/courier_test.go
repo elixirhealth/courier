@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/drausin/libri/libri/librarian/api"
-	"github.com/elxirhealth/courier/pkg/util"
+	"github.com/elxirhealth/courier/pkg/base/util"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/rand"
 	"net"
+	"sync"
 	"testing"
 
 	"github.com/drausin/libri/libri/common/id"
@@ -17,24 +18,26 @@ import (
 
 func TestNewCourier_ok(t *testing.T) {
 	config := NewDefaultConfig()
-	c, err := NewCourier(config)
+	c, err := newCourier(config)
 	assert.Nil(t, err)
-	assert.NotNil(t, c.(*courier).clientID)
-	// assert.NotNil(t, c.(*courier).cache)  // TODO (drausin) add when have in-mem cache
-	assert.NotNil(t, c.(*courier).getter)
-	assert.NotNil(t, c.(*courier).acquirer)
-	assert.NotNil(t, c.(*courier).libriPutQueue)
-	assert.Equal(t, config, c.(*courier).config)
+	assert.NotNil(t, c.clientID)
+	// assert.NotNil(t, c.(*courier).Cache)  // TODO (drausin) add when have in-mem Cache
+	assert.NotNil(t, c.getter)
+	assert.NotNil(t, c.acquirer)
+	assert.NotNil(t, c.libriPutQueue)
+	assert.Equal(t, config, c.config)
 }
 
 func TestNewCourier_err(t *testing.T) {
 	badConfigs := map[string]*Config{
 		"missing clientID file": NewDefaultConfig().WithClientIDFilepath("missing.der"),
-		"emptyProjectID":        NewDefaultConfig().WithCacheStorage(DataStore),
+		"emptyProjectID": NewDefaultConfig().WithCache(
+			&cache.Parameters{StorageType: cache.DataStore},
+		),
 		"empty librarian addrs": NewDefaultConfig().WithLibrarianAddrs([]*net.TCPAddr{}),
 	}
 	for desc, badConfig := range badConfigs {
-		c, err := NewCourier(badConfig)
+		c, err := newCourier(badConfig)
 		assert.NotNil(t, err, desc)
 		assert.Nil(t, c)
 	}
@@ -50,7 +53,7 @@ func TestCourier_Put_ok(t *testing.T) {
 		Value: value,
 	}
 
-	// when cache has value, Put request should leave existing
+	// when Cache has value, Put request should leave existing
 	cc := &fixedCache{value: valueBytes}
 	c := &courier{
 		cache:         cc,
@@ -61,7 +64,7 @@ func TestCourier_Put_ok(t *testing.T) {
 	assert.Equal(t, api.PutOperation_LEFT_EXISTING, rp.Operation)
 	assert.Equal(t, key.String(), cc.getKey)
 
-	// when cache doesn't have value, Put request should store in cache and add
+	// when Cache doesn't have value, Put request should store in Cache and add
 	// to libriPutQueue queue
 	cc = &fixedCache{getErr: cache.ErrMissingValue}
 	c = &courier{
@@ -95,7 +98,7 @@ func TestCourier_Put_err(t *testing.T) {
 			rq: &api.PutRequest{},
 			c:  &courier{},
 		},
-		"cache Get error": {
+		"Cache Get error": {
 			rq: okRq,
 			c: &courier{
 				cache: &fixedCache{getErr: errors.New("some Get error")},
@@ -108,7 +111,7 @@ func TestCourier_Put_err(t *testing.T) {
 			},
 			err: ErrExistingNotEqualNewDocument,
 		},
-		"cache Put error": {
+		"Cache Put error": {
 			rq: okRq,
 			c: &courier{
 				cache: &fixedCache{
@@ -151,7 +154,7 @@ func TestCourier_Get_ok(t *testing.T) {
 		Key: key.Bytes(),
 	}
 
-	// when cache has doc, Get should return it
+	// when Cache has doc, Get should return it
 	cc := &fixedCache{value: valueBytes}
 	c := &courier{cache: cc}
 	rp, err := c.Get(context.Background(), rq)
@@ -159,7 +162,7 @@ func TestCourier_Get_ok(t *testing.T) {
 	assert.Equal(t, value, rp.Value)
 	assert.Equal(t, key.String(), cc.getKey)
 
-	// when cache doesn't have doc but libri does, Get should return it
+	// when Cache doesn't have doc but libri does, Get should return it
 	cc = &fixedCache{getErr: cache.ErrMissingValue}
 	acq := &fixedAcquirer{doc: value}
 	c = &courier{
@@ -190,7 +193,7 @@ func TestCourier_Get_err(t *testing.T) {
 			rq: &api.GetRequest{},
 			c:  &courier{},
 		},
-		"cache Get error": {
+		"Cache Get error": {
 			rq: okRq,
 			c: &courier{
 				cache: &fixedCache{getErr: errors.New("some Get error")},
@@ -216,7 +219,7 @@ func TestCourier_Get_err(t *testing.T) {
 				acquirer: &fixedAcquirer{err: libriapi.ErrMissingDocument},
 			},
 		},
-		"cache Put error": {
+		"Cache Put error": {
 			rq: okRq,
 			c: &courier{
 				cache: &fixedCache{
@@ -247,8 +250,10 @@ type fixedCache struct {
 	getKey       string
 	getErr       error
 	evictErr     error
-	evictNexterr error
+	evictCalls   uint
+	evictNextErr error
 	value        []byte
+	mu           sync.Mutex
 }
 
 func (f *fixedCache) Put(key string, value []byte) error {
@@ -270,7 +275,10 @@ func (f *fixedCache) Evict(key string) error {
 }
 
 func (f *fixedCache) EvictNext() error {
-	return f.evictNexterr
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.evictCalls++
+	return f.evictNextErr
 }
 
 type fixedAcquirer struct {

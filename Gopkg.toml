@@ -19,27 +19,10 @@
 #  name = "github.com/x/y"
 #  version = "2.4.0"
 
-
-[[constraint]]
-  name = "cloud.google.com/go"
-  version = "0.17.0"
-
 [[constraint]]
   name = "github.com/drausin/libri"
   revision = "df1347893b506c2eb64935347cf7c7a6ca928e9d"
 
 [[constraint]]
-  branch = "master"
-  name = "github.com/golang/protobuf"
-
-[[constraint]]
-  name = "github.com/stretchr/testify"
-  version = "1.2.0"
-
-[[constraint]]
-  branch = "master"
-  name = "golang.org/x/net"
-
-[[constraint]]
-  name = "google.golang.org/grpc"
-  version = "1.9.0"
+  name = "github.com/tecbot/gorocksdb"
+  revision = "57a309fefefb9c03d6dcc11a0e5705fc4711b46d"

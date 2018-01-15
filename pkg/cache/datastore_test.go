@@ -10,7 +10,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/drausin/libri/libri/common/id"
-	"github.com/elxirhealth/courier/pkg/util"
+	"github.com/elxirhealth/courier/pkg/base/util"
 	"github.com/stretchr/testify/assert"
 )
 

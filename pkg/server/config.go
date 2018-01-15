@@ -5,23 +5,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/elxirhealth/courier/pkg/util"
-)
-
-// CacheStorageType indicates how the cache is stored.
-type CacheStorageType int
-
-const (
-	// Unspecified indicates when the storage type is not specified (and thus should take the
-	// default value).
-	Unspecified CacheStorageType = iota
-
-	// InMemory indicates an ephemeral, in-memory (and thus not highly available) cache. This
-	// storage layer should generally only be used during testing and not in production.
-	InMemory
-
-	// DataStore indicates a (highly available) cache backed by GCP DataStore.
-	DataStore
+	"github.com/elxirhealth/courier/pkg/base/server"
+	"github.com/elxirhealth/courier/pkg/base/util"
+	"github.com/elxirhealth/courier/pkg/cache"
 )
 
 const (
@@ -34,35 +20,35 @@ const (
 	// DefaultLibriPutQueueSize is the default size of the libri Put queue.
 	DefaultLibriPutQueueSize = 64
 
-	// DefaultCacheStorage is the default storage type for the cache.
-	DefaultCacheStorage = InMemory
-
 	// DefaultLibrarianPort is the default port of the librarian server.
 	DefaultLibrarianPort = 20100
 
-	// DefaultLibrarianIP is the default IP of of the librarian server.
-	DefaultLibrarianIP = "localhost"
+	// DefaultLibrarianHost is the default IP of of the librarian server.
+	DefaultLibrarianHost = "localhost"
 )
 
 // Config is the config for a courier instance.
 type Config struct {
+	*server.BaseConfig
 	LibriGetTimeout   time.Duration
 	LibriPutTimeout   time.Duration
 	LibriPutQueueSize uint
 	ClientIDFilepath  string
-	CacheStorage      CacheStorageType
 	GCPProjectID      string
+	Cache             *cache.Parameters
 	LibrarianAddrs    []*net.TCPAddr
 }
 
 // NewDefaultConfig create a new config instance with default values.
 func NewDefaultConfig() *Config {
-	config := &Config{}
+	config := &Config{
+		BaseConfig: server.NewDefaultBaseConfig(),
+	}
 	return config.
 		WithDefaultLibriGetTimeout().
 		WithDefaultLibriPutTimeout().
 		WithDefaultLibriPutQueueSize().
-		WithDefaultCacheStorage().
+		WithDefaultCache().
 		WithDefaultLibrarianAddrs()
 }
 
@@ -124,25 +110,24 @@ func (c *Config) WithClientIDFilepath(fp string) *Config {
 	return c
 }
 
-// WithCacheStorage sets the cache storage type to the given value or to the default if it is
-// unspecified.
-func (c *Config) WithCacheStorage(cst CacheStorageType) *Config {
-	if cst == Unspecified {
-		return c.WithDefaultCacheStorage()
-	}
-	c.CacheStorage = cst
-	return c
-}
-
-// WithDefaultCacheStorage sets the cache storage type to the default value.
-func (c *Config) WithDefaultCacheStorage() *Config {
-	c.CacheStorage = DefaultCacheStorage
-	return c
-}
-
 // WithGCPProjectID sets the GCP ProjectID to the given value.
 func (c *Config) WithGCPProjectID(id string) *Config {
 	c.GCPProjectID = id
+	return c
+}
+
+// WithCache sets the cache parameters to the given value or the defaults if it is nil.
+func (c *Config) WithCache(p *cache.Parameters) *Config {
+	if p == nil {
+		return c.WithDefaultCache()
+	}
+	c.Cache = p
+	return c
+}
+
+// WithDefaultCache set the Cache parameters to their default values.
+func (c *Config) WithDefaultCache() *Config {
+	c.Cache = cache.NewDefaultParameters()
 	return c
 }
 
@@ -158,7 +143,7 @@ func (c *Config) WithLibrarianAddrs(librarianAddrs []*net.TCPAddr) *Config {
 // WithDefaultLibrarianAddrs sets the librarian addresses to a single address of the default IP
 // and port.
 func (c *Config) WithDefaultLibrarianAddrs() *Config {
-	addrStr := fmt.Sprintf("%s:%d", DefaultLibrarianIP, DefaultLibrarianPort)
+	addrStr := fmt.Sprintf("%s:%d", DefaultLibrarianHost, DefaultLibrarianPort)
 	addr, err := net.ResolveTCPAddr("tcp4", addrStr)
 	util.MaybePanic(err) // should never happen
 	c.LibrarianAddrs = []*net.TCPAddr{addr}
