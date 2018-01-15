@@ -52,6 +52,7 @@
     "libri/common/ecid",
     "libri/common/errors",
     "libri/common/id",
+    "libri/common/logging",
     "libri/common/storage",
     "libri/librarian/api",
     "libri/librarian/client"
@@ -134,7 +135,10 @@
 
 [[projects]]
   name = "github.com/prometheus/client_golang"
-  packages = ["prometheus"]
+  packages = [
+    "prometheus",
+    "prometheus/promhttp"
+  ]
   revision = "c5b7fccd204277076155f10851dad72b76a49317"
   version = "v0.8.0"
 
@@ -327,6 +331,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "2ec0666176229680d5280edef445c2234680fa8e6ce40e1879381b4d6a8cffae"
+  inputs-digest = "4a94bd79c7e8006d18350a95275be31c90b4f8d30de8e54d4482fecc2ae7fadc"
   solver-name = "gps-cdcl"
   solver-version = 1
