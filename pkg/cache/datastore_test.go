@@ -162,11 +162,12 @@ func TestDatastoreCache_Get_err(t *testing.T) {
 func TestDatastoreCache_EvictNext_ok(t *testing.T) {
 	dsClient := &fixedDatastoreClient{}
 	evictionKeys := []string{"key1", "key2"}
+	ar := &fixedAccessRecorder{
+		nextEvictions: evictionKeys,
+	}
 	dc := &datastoreCache{
-		client: dsClient,
-		accessRecorder: &fixedAccessRecorder{
-			nextEvictions: evictionKeys,
-		},
+		client:         dsClient,
+		accessRecorder: ar,
 	}
 	err := dc.EvictNext()
 	assert.Nil(t, err)
@@ -175,6 +176,7 @@ func TestDatastoreCache_EvictNext_ok(t *testing.T) {
 		datastore.NameKey(documentKind, "key2", nil),
 	}
 	assert.Equal(t, expectedDeleteKeys, dsClient.deleteKeys)
+	assert.Equal(t, evictionKeys, ar.evictKeys)
 }
 
 func TestDatastoreCache_EvictNext_err(t *testing.T) {
@@ -186,6 +188,15 @@ func TestDatastoreCache_EvictNext_err(t *testing.T) {
 		},
 	}
 	err := dc.EvictNext()
+	assert.NotNil(t, err)
+
+	dc = &datastoreCache{
+		client: dsClient,
+		accessRecorder: &fixedAccessRecorder{
+			evictErr: errors.New("some evict error"),
+		},
+	}
+	err = dc.EvictNext()
 	assert.NotNil(t, err)
 }
 
@@ -260,34 +271,104 @@ func TestDatastoreAccessRecorder_CacheEvict(t *testing.T) {
 }
 
 func TestDatastoreAccessRecorder_GetNextEvictions_ok(t *testing.T) {
+	params := &Parameters{
+		RecentWindow:      24 * time.Hour,
+		LRUCacheSize:      2,
+		EvictionBatchSize: 3,
+	}
+
 	dsKeys := []*datastore.Key{
 		datastore.NameKey(accessRecordKind, "key1", nil),
 		datastore.NameKey(accessRecordKind, "key2", nil),
 	}
+
+	// should have eviction when count value > LRU cache size
 	dsClient := &fixedDatastoreClient{
 		queryAllKeysResult: dsKeys,
+		countValue:         4,
 	}
 	ds := datastoreAccessRecorder{
 		client: dsClient,
-		params: &Parameters{RecentWindow: 24 * time.Hour},
+		params: params,
 	}
 	expected := []string{"key1", "key2"}
 	keys, err := ds.GetNextEvictions()
 	assert.Nil(t, err)
 	assert.Equal(t, expected, keys)
+
+	// should not have any evictions when count value <= LRU cache size
+	dsClient = &fixedDatastoreClient{
+		queryAllKeysResult: dsKeys,
+		countValue:         2,
+	}
+	ds = datastoreAccessRecorder{
+		client: dsClient,
+		params: params,
+	}
+	keys, err = ds.GetNextEvictions()
+	assert.Nil(t, err)
+	assert.Len(t, keys, 0)
 }
 
 func TestDatastoreAccessRecorder_GetNextEvictions_err(t *testing.T) {
+	params := &Parameters{
+		RecentWindow:      24 * time.Hour,
+		LRUCacheSize:      2,
+		EvictionBatchSize: 3,
+	}
+
+	// check count error bubbles up
 	dsClient := &fixedDatastoreClient{
-		queryAllKeysErr: errors.New("some queryAllKeys error"),
+		countErr: errors.New("some count error"),
 	}
 	ds := datastoreAccessRecorder{
 		client: dsClient,
-		params: &Parameters{RecentWindow: 24 * time.Hour},
+		params: params,
 	}
 	keys, err := ds.GetNextEvictions()
 	assert.NotNil(t, err)
 	assert.Nil(t, keys)
+
+	// check queryAllKeys error bubbles up
+	dsClient = &fixedDatastoreClient{
+		countValue:      4,
+		queryAllKeysErr: errors.New("some queryAllKeys error"),
+	}
+	ds = datastoreAccessRecorder{
+		client: dsClient,
+		params: params,
+	}
+	keys, err = ds.GetNextEvictions()
+	assert.NotNil(t, err)
+	assert.Nil(t, keys)
+}
+
+func TestDatastoreAccessRecorder_Evict_ok(t *testing.T) {
+	dsClient := &fixedDatastoreClient{}
+	ds := datastoreAccessRecorder{
+		client: dsClient,
+	}
+	keys := []string{"key1", "key2"}
+	err := ds.Evict(keys)
+	assert.Nil(t, err)
+
+	expected := []*datastore.Key{
+		datastore.NameKey(accessRecordKind, "key1", nil),
+		datastore.NameKey(accessRecordKind, "key2", nil),
+	}
+	assert.Equal(t, expected, dsClient.deleteKeys)
+}
+
+func TestDatastoreAccessRecorder_Evict_err(t *testing.T) {
+	dsClient := &fixedDatastoreClient{
+		deleteErr: errors.New("some delete error"),
+	}
+	ds := datastoreAccessRecorder{
+		client: dsClient,
+	}
+	keys := []string{"key1", "key2"}
+	err := ds.Evict(keys)
+	assert.NotNil(t, err)
 }
 
 func TestDatastoreAccessRecorder_update_err(t *testing.T) {
@@ -351,8 +432,14 @@ type fixedDatastoreClient struct {
 	putErr             error
 	deleteErr          error
 	deleteKeys         []*datastore.Key
+	countValue         int
+	countErr           error
 	queryAllKeysResult []*datastore.Key
 	queryAllKeysErr    error
+}
+
+func (f *fixedDatastoreClient) count(ctx context.Context, q *datastore.Query) (int, error) {
+	return f.countValue, f.countErr
 }
 
 func (f *fixedDatastoreClient) put(key *datastore.Key, value interface{}) (*datastore.Key, error) {
@@ -402,6 +489,8 @@ type fixedAccessRecorder struct {
 	libriPutErr         error
 	nextEvictions       []string
 	getEvictionBatchErr error
+	evictErr            error
+	evictKeys           []string
 }
 
 func (r *fixedAccessRecorder) CachePut(key string) error {
@@ -422,4 +511,9 @@ func (r *fixedAccessRecorder) LibriPut(key string) error {
 
 func (r *fixedAccessRecorder) GetNextEvictions() ([]string, error) {
 	return r.nextEvictions, r.getEvictionBatchErr
+}
+
+func (r *fixedAccessRecorder) Evict(keys []string) error {
+	r.evictKeys = keys
+	return r.evictErr
 }

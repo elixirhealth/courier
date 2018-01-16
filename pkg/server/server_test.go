@@ -22,7 +22,7 @@ func TestNewCourier_ok(t *testing.T) {
 	c, err := newCourier(config)
 	assert.Nil(t, err)
 	assert.NotNil(t, c.clientID)
-	// assert.NotNil(t, c.(*courier).Cache)  // TODO (drausin) add when have in-mem Cache
+	assert.NotNil(t, c.cache)
 	assert.NotNil(t, c.getter)
 	assert.NotNil(t, c.acquirer)
 	assert.NotNil(t, c.libriPutQueue)
@@ -56,7 +56,7 @@ func TestCourier_Put_ok(t *testing.T) {
 
 	// when Cache has value, Put request should leave existing
 	cc := &fixedCache{value: valueBytes}
-	c := &courier{
+	c := &Courier{
 		BaseServer:    server.NewBaseServer(server.NewDefaultBaseConfig()),
 		cache:         cc,
 		libriPutQueue: make(chan string, 1),
@@ -69,7 +69,7 @@ func TestCourier_Put_ok(t *testing.T) {
 	// when Cache doesn't have value, Put request should store in Cache and add
 	// to libriPutQueue queue
 	cc = &fixedCache{getErr: cache.ErrMissingValue}
-	c = &courier{
+	c = &Courier{
 		BaseServer:    server.NewBaseServer(server.NewDefaultBaseConfig()),
 		cache:         cc,
 		libriPutQueue: make(chan string, 1),
@@ -94,29 +94,29 @@ func TestCourier_Put_err(t *testing.T) {
 
 	cases := map[string]struct {
 		rq  *api.PutRequest
-		c   *courier
+		c   *Courier
 		err error
 	}{
 		"bad request": {
 			rq: &api.PutRequest{},
-			c:  &courier{},
+			c:  &Courier{},
 		},
 		"Cache Get error": {
 			rq: okRq,
-			c: &courier{
+			c: &Courier{
 				cache: &fixedCache{getErr: errors.New("some Get error")},
 			},
 		},
 		"existing not equal new doc": {
 			rq: okRq,
-			c: &courier{
+			c: &Courier{
 				cache: &fixedCache{value: []byte{1, 2, 3, 4}},
 			},
 			err: ErrExistingNotEqualNewDocument,
 		},
 		"Cache Put error": {
 			rq: okRq,
-			c: &courier{
+			c: &Courier{
 				cache: &fixedCache{
 					getErr: cache.ErrMissingValue,
 					putErr: errors.New("some Put error"),
@@ -125,7 +125,7 @@ func TestCourier_Put_err(t *testing.T) {
 		},
 		"full Libri put queue": {
 			rq: okRq,
-			c: &courier{
+			c: &Courier{
 				cache: &fixedCache{
 					getErr: cache.ErrMissingValue,
 				},
@@ -160,7 +160,7 @@ func TestCourier_Get_ok(t *testing.T) {
 
 	// when Cache has doc, Get should return it
 	cc := &fixedCache{value: valueBytes}
-	c := &courier{cache: cc}
+	c := &Courier{cache: cc}
 	rp, err := c.Get(context.Background(), rq)
 	assert.Nil(t, err)
 	assert.Equal(t, value, rp.Value)
@@ -169,7 +169,7 @@ func TestCourier_Get_ok(t *testing.T) {
 	// when Cache doesn't have doc but libri does, Get should return it
 	cc = &fixedCache{getErr: cache.ErrMissingValue}
 	acq := &fixedAcquirer{doc: value}
-	c = &courier{
+	c = &Courier{
 		cache:    cc,
 		acquirer: acq,
 	}
@@ -190,42 +190,42 @@ func TestCourier_Get_err(t *testing.T) {
 	}
 	cases := map[string]struct {
 		rq  *api.GetRequest
-		c   *courier
+		c   *Courier
 		err error
 	}{
 		"bad request": {
 			rq: &api.GetRequest{},
-			c:  &courier{},
+			c:  &Courier{},
 		},
 		"Cache Get error": {
 			rq: okRq,
-			c: &courier{
+			c: &Courier{
 				cache: &fixedCache{getErr: errors.New("some Get error")},
 			},
 		},
 		"bad marshaled doc": {
 			rq: okRq,
-			c: &courier{
+			c: &Courier{
 				cache: &fixedCache{value: []byte{1, 2, 3, 4}},
 			},
 		},
 		"acquirer Acquire error": {
 			rq: okRq,
-			c: &courier{
+			c: &Courier{
 				cache:    &fixedCache{getErr: cache.ErrMissingValue},
 				acquirer: &fixedAcquirer{err: errors.New("some Acquire error")},
 			},
 		},
 		"acquirer Acquire missing doc": {
 			rq: okRq,
-			c: &courier{
+			c: &Courier{
 				cache:    &fixedCache{getErr: cache.ErrMissingValue},
 				acquirer: &fixedAcquirer{err: libriapi.ErrMissingDocument},
 			},
 		},
 		"Cache Put error": {
 			rq: okRq,
-			c: &courier{
+			c: &Courier{
 				cache: &fixedCache{
 					getErr: cache.ErrMissingValue,
 					putErr: errors.New("some Put error"),

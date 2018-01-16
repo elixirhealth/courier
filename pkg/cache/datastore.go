@@ -45,15 +45,6 @@ type MarshaledDocument struct {
 	ValuePart3 []byte `datastore:"value_part_3,noindex,omitempty"`
 }
 
-// AccessRecord contains access times for Puts and Gets for a particular document.
-type AccessRecord struct {
-	CachePutDateEarliest int64     `datastore:"cache_put_date_earliest"`
-	CachePutTimeEarliest time.Time `datastore:"cache_put_time_earliest,noindex"`
-	LibriPutOccurred     bool      `datastore:"libri_put_occurred"`
-	LibriPutTimeEarliest time.Time `datastore:"libri_put_time_earliest,noindex"`
-	CacheGetTimeLatest   time.Time `datastore:"cache_get_time_latest,noindex"`
-}
-
 type datastoreCache struct {
 	client         datastoreClient
 	accessRecorder AccessRecorder
@@ -133,6 +124,9 @@ func (c *datastoreCache) EvictNext() error {
 	for i, keyName := range keyNames {
 		dsKeys[i] = datastore.NameKey(documentKind, keyName, nil)
 	}
+	if err = c.accessRecorder.Evict(keyNames); err != nil {
+		return err
+	}
 	return c.client.delete(dsKeys)
 }
 
@@ -151,14 +145,17 @@ func (r *datastoreAccessRecorder) CachePut(key string) error {
 		// in both cases, we just want to return the err
 		return err
 	}
+	_, err = r.client.put(dsKey, newCachePutAccessRecord())
+	return err
+}
+
+func newCachePutAccessRecord() *AccessRecord {
 	now := time.Now()
-	value := &AccessRecord{
+	return &AccessRecord{
 		CachePutDateEarliest: now.Unix() / secsPerDay,
 		CachePutTimeEarliest: now,
 		LibriPutOccurred:     false,
 	}
-	_, err = r.client.put(dsKey, value)
-	return err
 }
 
 // CacheGet updates the access record's latest get time for the document with the given key.
@@ -185,17 +182,30 @@ func (r *datastoreAccessRecorder) CacheEvict(keys []string) error {
 
 // GetNextEvictions gets the next batch of keys for documents to evict.
 func (r *datastoreAccessRecorder) GetNextEvictions() ([]string, error) {
-	// - before recent window
-	// - put into libri
-	// - gotten least recently
 	beforeDate := time.Now().Add(-r.params.RecentWindow).Unix() / secsPerDay
-	q := datastore.NewQuery(accessRecordKind).
+
+	evictable := datastore.NewQuery(accessRecordKind).
 		Filter("cache_put_date_earliest < ", beforeDate).
-		Filter("libri_put_occurred = ", true).
-		Order("cache_get_time_latest").
-		Limit(int(r.params.EvictionBatchSize)).
-		KeysOnly()
+		Filter("libri_put_occurred = ", true)
+
 	ctx, cancel := context.WithTimeout(context.Background(), r.params.EvictionQueryTimeout)
+	nEvictable, err := r.client.count(ctx, evictable)
+	cancel()
+	if err != nil {
+		return nil, err
+	}
+	if nEvictable <= int(r.params.LRUCacheSize) {
+		// don't evict anything since cache size smaller than size limit
+		return []string{}, err
+	}
+	nToEvict := int(r.params.LRUCacheSize) - nEvictable
+	if nToEvict > int(r.params.EvictionBatchSize) {
+		nToEvict = int(r.params.EvictionBatchSize)
+	}
+
+	// get keys of nToEvict docs gotten least recently
+	q := evictable.Order("cache_get_time_latest").Limit(nToEvict).KeysOnly()
+	ctx, cancel = context.WithTimeout(context.Background(), r.params.EvictionQueryTimeout)
 	keys, err := r.client.queryAllKeys(ctx, q)
 	cancel()
 	if err != nil {
@@ -208,31 +218,42 @@ func (r *datastoreAccessRecorder) GetNextEvictions() ([]string, error) {
 	return keyNames, nil
 }
 
+func (r *datastoreAccessRecorder) Evict(keys []string) error {
+	dsKeys := make([]*datastore.Key, len(keys))
+	for i, keyName := range keys {
+		dsKeys[i] = datastore.NameKey(accessRecordKind, keyName, nil)
+	}
+	return r.client.delete(dsKeys)
+}
+
 func (r *datastoreAccessRecorder) update(key string, update *AccessRecord) error {
 	dsKey := datastore.NameKey(accessRecordKind, key, nil)
-	value := &AccessRecord{}
-	if err := r.client.get(dsKey, value); err != nil {
+	existing := &AccessRecord{}
+	if err := r.client.get(dsKey, existing); err != nil {
 		return err
 	}
+	updateAccessRecord(existing, update)
+	_, err := r.client.put(dsKey, existing)
+	return err
+}
+
+func updateAccessRecord(existing, update *AccessRecord) {
 	if !update.CacheGetTimeLatest.IsZero() {
-		value.CacheGetTimeLatest = update.CacheGetTimeLatest
+		existing.CacheGetTimeLatest = update.CacheGetTimeLatest
 	}
 	if !update.LibriPutTimeEarliest.IsZero() {
-		value.LibriPutTimeEarliest = update.LibriPutTimeEarliest
+		existing.LibriPutTimeEarliest = update.LibriPutTimeEarliest
 	}
 	if update.LibriPutOccurred {
-		value.LibriPutOccurred = update.LibriPutOccurred
+		existing.LibriPutOccurred = update.LibriPutOccurred
 	}
-	if _, err := r.client.put(dsKey, value); err != nil {
-		return err
-	}
-	return nil
 }
 
 type datastoreClient interface {
 	put(key *datastore.Key, value interface{}) (*datastore.Key, error)
 	get(key *datastore.Key, dest interface{}) error
 	delete(keys []*datastore.Key) error
+	count(ctx context.Context, q *datastore.Query) (int, error)
 	queryAllKeys(ctx context.Context, q *datastore.Query) ([]*datastore.Key, error)
 }
 
@@ -250,6 +271,10 @@ func (c *datastoreClientImpl) put(key *datastore.Key, value interface{}) (*datas
 
 func (c *datastoreClientImpl) delete(keys []*datastore.Key) error {
 	return c.inner.DeleteMulti(context.Background(), keys)
+}
+
+func (c *datastoreClientImpl) count(ctx context.Context, q *datastore.Query) (int, error) {
+	return c.inner.Count(ctx, q)
 }
 
 func (c *datastoreClientImpl) queryAllKeys(

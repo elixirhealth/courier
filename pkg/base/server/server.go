@@ -116,7 +116,7 @@ func NewBaseServer(config *BaseConfig) *BaseServer {
 }
 
 // Serve starts the server listening for requests.
-func (b *BaseServer) Serve(registerServer func(s *grpc.Server)) error {
+func (b *BaseServer) Serve(registerServer func(s *grpc.Server), onServing func()) error {
 	s := grpc.NewServer(
 		grpc.StreamInterceptor(grpc_prometheus.StreamServerInterceptor),
 		grpc.UnaryInterceptor(grpc_prometheus.UnaryServerInterceptor),
@@ -138,6 +138,8 @@ func (b *BaseServer) Serve(registerServer func(s *grpc.Server)) error {
 		close(b.stopped)
 	}()
 
+	b.startAuxRoutines()
+
 	// set started and health status shortly after starting to serve requests
 	go func() {
 		time.Sleep(postListenNotifyWait)
@@ -149,9 +151,8 @@ func (b *BaseServer) Serve(registerServer func(s *grpc.Server)) error {
 		b.health.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 
 		close(b.started)
+		onServing()
 	}()
-
-	b.startAuxRoutines()
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", b.config.ServerPort))
 	if err != nil {
