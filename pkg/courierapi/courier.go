@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"crypto/sha256"
 
+	cerrors "github.com/drausin/libri/libri/common/errors"
 	"github.com/drausin/libri/libri/common/id"
 	"github.com/drausin/libri/libri/librarian/api"
-	"github.com/elxirhealth/courier/pkg/base/util"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 )
@@ -30,7 +30,7 @@ func ValidatePutRequest(rq *PutRequest) error {
 		return err
 	}
 	valueBytes, err := proto.Marshal(rq.Value)
-	util.MaybePanic(err) // should never happen b/c just unmarshaled from wire
+	cerrors.MaybePanic(err) // should never happen b/c just unmarshaled from wire
 	hash := sha256.Sum256(valueBytes)
 	if !bytes.Equal(rq.Key, hash[:]) {
 		return ErrKeyNotValueHash

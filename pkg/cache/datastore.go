@@ -63,19 +63,20 @@ type datastoreCache struct {
 // - if DATASTORE_EMULATOR_HOST env var is set, it uses that instead of project
 // - production creds use GOOGLE_APPLICATION_CREDENTIALS env var to point to the credentials JSON
 // file
-func NewDatastore(gcpProjectID string, params *Parameters) (Cache, error) {
+func NewDatastore(gcpProjectID string, params *Parameters) (Cache, AccessRecorder, error) {
 	client, err := datastore.NewClient(context.Background(), gcpProjectID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	wrappedClient := &datastoreClientImpl{client}
-	return &datastoreCache{
+	ar := &datastoreAccessRecorder{
 		client: wrappedClient,
-		accessRecorder: &datastoreAccessRecorder{
-			client: wrappedClient,
-			params: params,
-		},
-	}, nil
+		params: params,
+	}
+	return &datastoreCache{
+		client:         wrappedClient,
+		accessRecorder: ar,
+	}, ar, nil
 }
 
 // Put stores the marshaled document value at the hex of its key.

@@ -9,6 +9,7 @@ import (
 
 	"github.com/drausin/libri/libri/common/id"
 	libriapi "github.com/drausin/libri/libri/librarian/api"
+	"github.com/elxirhealth/courier/pkg/base/server"
 	"github.com/elxirhealth/courier/pkg/cache"
 	api "github.com/elxirhealth/courier/pkg/courierapi"
 	"github.com/golang/protobuf/proto"
@@ -56,6 +57,7 @@ func TestCourier_Put_ok(t *testing.T) {
 	// when Cache has value, Put request should leave existing
 	cc := &fixedCache{value: valueBytes}
 	c := &courier{
+		BaseServer:    server.NewBaseServer(server.NewDefaultBaseConfig()),
 		cache:         cc,
 		libriPutQueue: make(chan string, 1),
 	}
@@ -68,6 +70,7 @@ func TestCourier_Put_ok(t *testing.T) {
 	// to libriPutQueue queue
 	cc = &fixedCache{getErr: cache.ErrMissingValue}
 	c = &courier{
+		BaseServer:    server.NewBaseServer(server.NewDefaultBaseConfig()),
 		cache:         cc,
 		libriPutQueue: make(chan string, 1),
 	}
@@ -133,6 +136,7 @@ func TestCourier_Put_err(t *testing.T) {
 	}
 
 	for desc, c := range cases {
+		c.c.BaseServer = server.NewBaseServer(server.NewDefaultBaseConfig())
 		rp, err := c.c.Put(context.Background(), c.rq)
 		assert.Nil(t, rp, desc)
 		if c.err != nil {
@@ -263,6 +267,8 @@ func (f *fixedCache) Put(key string, value []byte) error {
 }
 
 func (f *fixedCache) Get(key string) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.getKey = key
 	if f.getErr != nil {
 		return nil, f.getErr

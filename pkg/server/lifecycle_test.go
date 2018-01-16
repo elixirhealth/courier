@@ -1,26 +1,191 @@
 package server
 
 import (
+	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/drausin/libri/libri/common/id"
+	"github.com/drausin/libri/libri/librarian/api"
+	"github.com/golang/protobuf/proto"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
 )
 
 // TODO (drausin) add Start test when have in-memory Cache
 
-func TestCourier_doEvictions(t *testing.T) {
+func TestCourier_startEvictor(t *testing.T) {
 	c, err := newCourier(NewDefaultConfig())
 	assert.Nil(t, err)
 	c.config.Cache.EvictionPeriod = 10 * time.Millisecond
 	testCache := &fixedCache{}
 	c.cache = testCache
 
-	go c.doEvictions()
+	go c.startEvictor()
+	time.Sleep(2 * c.config.Cache.EvictionPeriod)
 	close(c.BaseServer.Stop)
 
-	time.Sleep(2 * c.config.Cache.EvictionPeriod)
 	testCache.mu.Lock()
 	assert.True(t, testCache.evictCalls > 0)
 	testCache.mu.Unlock()
+}
+
+func TestCourier_startLibriPutter_ok(t *testing.T) {
+	rng := rand.New(rand.NewSource(0))
+	c, err := newCourier(NewDefaultConfig())
+	assert.Nil(t, err)
+	doc, key := api.NewTestDocument(rng)
+	docBytes, err := proto.Marshal(doc)
+	assert.Nil(t, err)
+
+	c.cache = &fixedCache{
+		value: docBytes,
+	}
+	testAccessRecorder := &fixedAccessRecorder{}
+	c.accessRecorder = testAccessRecorder
+	testPub := &fixedPublisher{}
+	c.publisher = testPub
+	c.libriPutQueue <- key.String()
+	go c.Serve(func(s *grpc.Server) {})
+	c.WaitUntilStarted()
+
+	wg1 := new(sync.WaitGroup)
+	wg1.Add(1)
+	go func(wg2 *sync.WaitGroup) {
+		defer wg2.Done()
+		c.startLibriPutter()
+	}(wg1)
+	time.Sleep(25 * time.Millisecond)
+	c.StopServer()
+
+	wg1.Wait()
+	assert.True(t, testPub.nPubs > 0)
+	assert.True(t, testAccessRecorder.nLibriPuts > 0)
+}
+
+func TestCourier_startLibriPutter_err(t *testing.T) {
+	rng := rand.New(rand.NewSource(0))
+	cc := NewDefaultConfig()
+	doc, key := api.NewTestDocument(rng)
+	docBytes, err := proto.Marshal(doc)
+	assert.Nil(t, err)
+
+	// check enough cache get errors should cause it to stop
+	c, err := newCourier(cc)
+	assert.Nil(t, err)
+	testPub := &fixedPublisher{}
+	c.cache = &fixedCache{
+		getErr: errors.New("some cache Get error"),
+	}
+	c.publisher = testPub
+	for i := 0; i < libriPutterErrQueueSize; i++ {
+		c.libriPutQueue <- key.String()
+	}
+	go c.Serve(func(s *grpc.Server) {})
+	c.WaitUntilStarted()
+	c.startLibriPutter()
+	assert.Equal(t, uint(0), testPub.nPubs)
+
+	// check fatal unmarshal error
+	c, err = newCourier(cc)
+	assert.Nil(t, err)
+	c.cache = &fixedCache{value: []byte{1, 2, 3, 4}}
+	c.publisher = &fixedPublisher{}
+	for i := 0; i < libriPutterErrQueueSize; i++ {
+		c.libriPutQueue <- "some key"
+	}
+	go c.Serve(func(s *grpc.Server) {})
+	c.WaitUntilStarted()
+	c.startLibriPutter()
+	assert.Equal(t, uint(0), testPub.nPubs)
+
+	// check enough publish errors should cause it to stop
+	c, err = newCourier(cc)
+	assert.Nil(t, err)
+	testPub = &fixedPublisher{
+		err: errors.New("some Publish error"),
+	}
+	c.cache = &fixedCache{value: docBytes}
+	c.publisher = testPub
+	for i := 0; i < libriPutterErrQueueSize; i++ {
+		c.libriPutQueue <- "some key"
+	}
+	go c.Serve(func(s *grpc.Server) {})
+	c.WaitUntilStarted()
+	c.startLibriPutter()
+	assert.Equal(t, uint(0), testPub.nPubs)
+
+	// check enough libri put errors should cause it to stop
+	c, err = newCourier(cc)
+	assert.Nil(t, err)
+	c.cache = &fixedCache{value: docBytes}
+	testPub = &fixedPublisher{}
+	c.publisher = testPub
+	testAR := &fixedAccessRecorder{
+		libriPutErr: errors.New("some access recorder libri put error"),
+	}
+	c.accessRecorder = testAR
+	for i := 0; i < libriPutterErrQueueSize; i++ {
+		c.libriPutQueue <- "some key"
+	}
+	go c.Serve(func(s *grpc.Server) {})
+	c.WaitUntilStarted()
+	c.startLibriPutter()
+	assert.True(t, testPub.nPubs > 0)
+	assert.Equal(t, uint(0), testAR.nLibriPuts)
+}
+
+type fixedPublisher struct {
+	nPubs uint
+	err   error
+	mu    sync.Mutex
+}
+
+func (f *fixedPublisher) Publish(
+	doc *api.Document, authorPub []byte, lc api.Putter,
+) (id.ID, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	docKey, _ := api.GetKey(doc)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.nPubs++
+	return docKey, nil
+}
+
+type fixedAccessRecorder struct {
+	cachePutErr         error
+	cacheGetErr         error
+	cacheEvict          error
+	libriPutErr         error
+	nextEvictions       []string
+	getEvictionBatchErr error
+	nLibriPuts          uint
+}
+
+func (r *fixedAccessRecorder) CachePut(key string) error {
+	return r.cachePutErr
+}
+
+func (r *fixedAccessRecorder) CacheGet(key string) error {
+	return r.cacheGetErr
+}
+
+func (r *fixedAccessRecorder) CacheEvict(keys []string) error {
+	return r.cacheEvict
+}
+
+func (r *fixedAccessRecorder) LibriPut(key string) error {
+	if r.libriPutErr != nil {
+		return r.libriPutErr
+	}
+	r.nLibriPuts++
+	return nil
+}
+
+func (r *fixedAccessRecorder) GetNextEvictions() ([]string, error) {
+	return r.nextEvictions, r.getEvictionBatchErr
 }

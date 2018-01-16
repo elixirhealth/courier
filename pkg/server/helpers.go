@@ -12,15 +12,15 @@ func getClientID(config *Config) (ecid.ID, error) {
 	return ecid.NewRandom(), nil
 }
 
-func getCache(config *Config) (cache.Cache, error) {
+func getCache(config *Config) (cache.Cache, cache.AccessRecorder, error) {
 	if config.Cache.StorageType == cache.DataStore {
-		dsCache, err := cache.NewDatastore(config.GCPProjectID, config.Cache)
+		dsCache, ar, err := cache.NewDatastore(config.GCPProjectID, config.Cache)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return dsCache, nil
+		return dsCache, ar, nil
 	}
 
 	// TODO (drausin) add default in-memory Cache
-	return nil, nil
+	return nil, nil, nil
 }
