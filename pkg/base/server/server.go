@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/drausin/libri/libri/common/errors"
 	"github.com/drausin/libri/libri/common/logging"
-	"github.com/elxirhealth/courier/pkg/base/util"
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
@@ -213,7 +213,7 @@ func (b *BaseServer) StopServer() {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	if err := b.metrics.Shutdown(ctx); err != nil {
 		if err == context.DeadlineExceeded {
-			util.MaybePanic(b.metrics.Close())
+			errors.MaybePanic(b.metrics.Close())
 		}
 	}
 	cancel()

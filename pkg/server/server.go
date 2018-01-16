@@ -8,14 +8,15 @@ import (
 
 	"github.com/drausin/libri/libri/author/io/publish"
 	"github.com/drausin/libri/libri/common/ecid"
+	cerrors "github.com/drausin/libri/libri/common/errors"
 	"github.com/drausin/libri/libri/common/id"
 	libriapi "github.com/drausin/libri/libri/librarian/api"
 	"github.com/drausin/libri/libri/librarian/client"
 	"github.com/elxirhealth/courier/pkg/base/server"
-	"github.com/elxirhealth/courier/pkg/base/util"
 	"github.com/elxirhealth/courier/pkg/cache"
 	api "github.com/elxirhealth/courier/pkg/courierapi"
 	"github.com/golang/protobuf/proto"
+	"google.golang.org/grpc"
 )
 
 var (
@@ -34,14 +35,15 @@ var (
 type courier struct {
 	*server.BaseServer
 
-	clientID ecid.ID
-	cache    cache.Cache
-	getter   libriapi.Getter
-	// putter   libriapi.Putter
-	acquirer publish.Acquirer
-	// publisher publish.Publisher
-	libriPutQueue chan string
-	config        *Config
+	clientID       ecid.ID
+	cache          cache.Cache
+	accessRecorder cache.AccessRecorder
+	getter         libriapi.Getter
+	putter         libriapi.Putter
+	acquirer       publish.Acquirer
+	publisher      publish.Publisher
+	libriPutQueue  chan string
+	config         *Config
 }
 
 // newCourier creates a new CourierServer from the given config.
@@ -50,7 +52,7 @@ func newCourier(config *Config) (*courier, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := getCache(config)
+	c, ar, err := getCache(config)
 	if err != nil {
 		return nil, err
 	}
@@ -68,13 +70,14 @@ func newCourier(config *Config) (*courier, error) {
 	acquirer := publish.NewAcquirer(clientID, client.NewSigner(clientID.Key()), pubParams)
 	baseServer := server.NewBaseServer(config.BaseConfig)
 	return &courier{
-		BaseServer:    baseServer,
-		clientID:      clientID,
-		cache:         c,
-		getter:        getter,
-		acquirer:      acquirer,
-		libriPutQueue: make(chan string, config.LibriPutQueueSize),
-		config:        config,
+		BaseServer:     baseServer,
+		clientID:       clientID,
+		cache:          c,
+		accessRecorder: ar,
+		getter:         getter,
+		acquirer:       acquirer,
+		libriPutQueue:  make(chan string, config.LibriPutQueueSize),
+		config:         config,
 	}, nil
 }
 
@@ -92,7 +95,7 @@ func (c *courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 		return nil, err
 	}
 	newDocBytes, err := proto.Marshal(rq.Value)
-	util.MaybePanic(err) // should never happen since we just unmarshaled from wire
+	cerrors.MaybePanic(err) // should never happen since we just unmarshaled from wire
 	if cachedDocBytes != nil {
 		// Cache has doc
 		if !bytes.Equal(newDocBytes, cachedDocBytes) {
@@ -107,6 +110,8 @@ func (c *courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 		return nil, err
 	}
 	select {
+	case <-c.BaseServer.Stop:
+		return nil, grpc.ErrServerStopped
 	case c.libriPutQueue <- docKey.String():
 		return &api.PutResponse{Operation: api.PutOperation_STORED}, nil
 	default:
@@ -144,7 +149,7 @@ func (c *courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse
 		return nil, ErrDocumentNotFound
 	}
 	docBytes, err = proto.Marshal(doc)
-	util.MaybePanic(err) // should never happen since we just unmarshaled from wire
+	cerrors.MaybePanic(err) // should never happen since we just unmarshaled from wire
 	if err = c.cache.Put(docKey.String(), docBytes); err != nil {
 		return nil, err
 	}

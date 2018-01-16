@@ -1,12 +1,23 @@
 package server
 
 import (
+	"sync"
 	"time"
 
+	cerrors "github.com/drausin/libri/libri/common/errors"
+	libriapi "github.com/drausin/libri/libri/librarian/api"
 	"github.com/elxirhealth/courier/pkg/base/server"
 	api "github.com/elxirhealth/courier/pkg/courierapi"
+	"github.com/golang/protobuf/proto"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+)
+
+const (
+	evictorErrQueueSize     = 4
+	evictorMaxErrRate       = 0.75
+	libriPutterErrQueueSize = 24
+	libriPutterMaxErrRate   = 1.0 / 3 // 3 different errors statements return an error
 )
 
 // Start starts the server and eviction routines.
@@ -17,13 +28,25 @@ func Start(config *Config) error {
 	}
 
 	// start courier aux routines
-	go c.doEvictions()
+	go c.startEvictor()
+	go c.startLibriPutter()
 
 	registerServer := func(s *grpc.Server) { api.RegisterCourierServer(s, c) }
 	return c.Serve(registerServer)
 }
 
-func (c *courier) doEvictions() {
+func (c *courier) startEvictor() {
+	// monitor non-fatal errors, sending fatal err if too many
+	errs := make(chan error, 2) // non-fatal errs and nils
+	fatal := make(chan error)   // signals fatal end
+	go cerrors.MonitorRunningErrors(errs, fatal, evictorErrQueueSize, evictorMaxErrRate,
+		c.Logger)
+	go func() {
+		err := <-fatal
+		c.Logger.Error("fatal eviction error", zap.Error(err))
+		c.StopServer()
+	}()
+
 	for {
 		pause := make(chan struct{})
 		go func() {
@@ -36,15 +59,90 @@ func (c *courier) doEvictions() {
 		}()
 		<-pause
 
-		if c.BaseServer.State() >= server.Stopped {
+		if c.BaseServer.State() >= server.Stopping {
 			return
 		}
-		if err := c.cache.EvictNext(); err != nil {
-			c.Logger.Error("fatal eviction error", zap.Error(err))
-			c.StopServer()
-			return
+		err := c.cache.EvictNext()
+		errs <- err
+		if err != nil {
+			c.Logger.Error("error evicting next batch", zap.Error(err))
 		}
 	}
+}
+
+func (c *courier) startLibriPutter() {
+	// monitor non-fatal errors, sending fatal err if too many
+	errs := make(chan error, 2*c.config.NLibriPutters)  // non-fatal errs and nils
+	fatal := make(chan error, 2*c.config.NLibriPutters) // signals fatal end
+	go cerrors.MonitorRunningErrors(errs, fatal, libriPutterErrQueueSize, libriPutterMaxErrRate,
+		c.Logger)
+	go func() {
+		err := <-fatal
+		c.Logger.Error("fatal libri putter error", zap.Error(err))
+		c.StopServer()
+	}()
+	go func() {
+		<-c.BaseServer.Stop
+		close(c.libriPutQueue)
+	}()
+
+	wg1 := new(sync.WaitGroup)
+	for i := uint(0); i < c.config.NLibriPutters; i++ {
+		wg1.Add(1)
+		go func(wg2 *sync.WaitGroup, j uint) {
+			defer wg2.Done()
+			var msg string
+			for key := range c.libriPutQueue {
+				if c.BaseServer.State() >= server.Stopping {
+					return
+				}
+				docBytes, err := c.cache.Get(key)
+
+				msg = "error getting document from cache"
+				if ok := c.handleRunningErr(err, errs, msg, key); !ok {
+					continue
+				}
+				doc := &libriapi.Document{}
+				if err = proto.Unmarshal(docBytes, doc); err != nil {
+					fatal <- err
+					return
+				}
+
+				docKey, err := c.publisher.Publish(doc, libriapi.GetAuthorPub(doc),
+					c.putter)
+				msg = "error publishing document to libri"
+				if ok := c.handleRunningErr(err, errs, msg, key); !ok {
+					continue
+				}
+
+				err = c.accessRecorder.LibriPut(key)
+				msg = "error updating document access record"
+				if ok := c.handleRunningErr(err, errs, msg, key); !ok {
+					continue
+				}
+
+				c.Logger.Info("published document to libri",
+					zap.Stringer(LoggerDocKey, docKey),
+				)
+			}
+		}(wg1, i)
+	}
+	wg1.Wait()
+}
+
+func (c *courier) handleRunningErr(err error, errs chan error, logMsg string, key string) bool {
+	select {
+	case errs <- err:
+	default:
+	}
+	if err != nil {
+		c.Logger.Error("error getting document from cache",
+			zap.String(LoggerDocKey, key),
+			zap.Error(err),
+		)
+		return false
+	}
+	return true
 }
 
 func maybeClose(ch chan struct{}) {

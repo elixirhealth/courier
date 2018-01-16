@@ -5,8 +5,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/drausin/libri/libri/common/errors"
 	"github.com/elxirhealth/courier/pkg/base/server"
-	"github.com/elxirhealth/courier/pkg/base/util"
 	"github.com/elxirhealth/courier/pkg/cache"
 )
 
@@ -19,6 +19,9 @@ const (
 
 	// DefaultLibriPutQueueSize is the default size of the libri Put queue.
 	DefaultLibriPutQueueSize = 64
+
+	// DefaultNLibriPutters is the default number of libri putters.
+	DefaultNLibriPutters = 16
 
 	// DefaultLibrarianPort is the default port of the librarian server.
 	DefaultLibrarianPort = 20100
@@ -33,6 +36,7 @@ type Config struct {
 	LibriGetTimeout   time.Duration
 	LibriPutTimeout   time.Duration
 	LibriPutQueueSize uint
+	NLibriPutters     uint
 	ClientIDFilepath  string
 	GCPProjectID      string
 	Cache             *cache.Parameters
@@ -48,6 +52,7 @@ func NewDefaultConfig() *Config {
 		WithDefaultLibriGetTimeout().
 		WithDefaultLibriPutTimeout().
 		WithDefaultLibriPutQueueSize().
+		WithDefaultNLibriPutters().
 		WithDefaultCache().
 		WithDefaultLibrarianAddrs()
 }
@@ -100,12 +105,25 @@ func (c *Config) WithDefaultLibriPutQueueSize() *Config {
 	return c
 }
 
+// WithNLibriPutters sets the number of libri putters to the given value or the default if it is
+// zero.
+func (c *Config) WithNLibriPutters(n uint) *Config {
+	if n == 0 {
+		return c.WithDefaultNLibriPutters()
+	}
+	c.NLibriPutters = n
+	return c
+}
+
+// WithDefaultNLibriPutters sets the number of libri putters to the default value.
+func (c *Config) WithDefaultNLibriPutters() *Config {
+	c.NLibriPutters = DefaultNLibriPutters
+	return c
+}
+
 // WithClientIDFilepath sets the file path for the local *.der file containing the clientID private
 // key.
 func (c *Config) WithClientIDFilepath(fp string) *Config {
-	if fp == "" {
-		return c
-	}
 	c.ClientIDFilepath = fp
 	return c
 }
@@ -145,7 +163,7 @@ func (c *Config) WithLibrarianAddrs(librarianAddrs []*net.TCPAddr) *Config {
 func (c *Config) WithDefaultLibrarianAddrs() *Config {
 	addrStr := fmt.Sprintf("%s:%d", DefaultLibrarianHost, DefaultLibrarianPort)
 	addr, err := net.ResolveTCPAddr("tcp4", addrStr)
-	util.MaybePanic(err) // should never happen
+	errors.MaybePanic(err) // should never happen
 	c.LibrarianAddrs = []*net.TCPAddr{addr}
 	return c
 }

@@ -41,13 +41,31 @@ func TestConfig_WithLibriPutQueueSize(t *testing.T) {
 	assert.NotEqual(t, c1.LibriPutQueueSize, c3.WithLibriPutQueueSize(2).LibriPutQueueSize)
 }
 
+func TestConfig_WithNLibriPutters(t *testing.T) {
+	c1, c2, c3 := &Config{}, &Config{}, &Config{}
+	c1.WithDefaultNLibriPutters()
+	assert.Equal(t, c1.NLibriPutters, c2.WithNLibriPutters(0).NLibriPutters)
+	assert.NotEqual(t, c1.NLibriPutters, c3.WithNLibriPutters(2).NLibriPutters)
+}
+
+func TestConfig_WithClientIDFilepath(t *testing.T) {
+	c1 := &Config{}
+	fp := "test filepath"
+	c1.WithClientIDFilepath(fp)
+	assert.Equal(t, fp, c1.ClientIDFilepath)
+}
+
+func TestConfig_WithGCPProjectID(t *testing.T) {
+	c1 := &Config{}
+	p := "project-ID"
+	c1.WithGCPProjectID(p)
+	assert.Equal(t, p, c1.GCPProjectID)
+}
+
 func TestConfig_WithCache(t *testing.T) {
 	c1, c2, c3 := &Config{}, &Config{}, &Config{}
 	c1.WithDefaultCache()
-	assert.Equal(t,
-		c1.Cache.StorageType,
-		c2.WithCache(&cache.Parameters{StorageType: cache.InMemory}).Cache.StorageType,
-	)
+	assert.Equal(t, c1.Cache.StorageType, c2.WithCache(nil).Cache.StorageType)
 	assert.NotEqual(t,
 		c1.Cache.StorageType,
 		c3.WithCache(&cache.Parameters{StorageType: cache.DataStore}).Cache.StorageType,
