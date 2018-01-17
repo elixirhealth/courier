@@ -15,18 +15,21 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
-func TestBaseServer_Server_ok(t *testing.T) {
+func TestBaseServer_Serve_ok(t *testing.T) {
 	c := NewDefaultBaseConfig()
 	c.Profile = false
-	srv := &pingPong{NewBaseServer(c)}
-	registerFunc := func(s *grpc.Server) { test.RegisterPingPongServer(s, srv) }
+	srv1 := &pingPong{NewBaseServer(c)}
+	registerFunc := func(s *grpc.Server) { test.RegisterPingPongServer(s, srv1) }
 
+	up := make(chan *pingPong, 1)
 	go func() {
-		err := srv.Serve(registerFunc)
+		err := srv1.Serve(registerFunc, func() { up <- srv1 })
 		assert.Nil(t, err)
 	}()
 
-	srv.WaitUntilStarted()
+	srv1.WaitUntilStarted()
+	srv2 := <-up
+	assert.Equal(t, srv1, srv2)
 
 	// set up clients
 	conn, err := grpc.Dial(fmt.Sprintf(":%d", c.ServerPort), grpc.WithInsecure())
@@ -41,16 +44,17 @@ func TestBaseServer_Server_ok(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, healthpb.HealthCheckResponse_SERVING, rp.Status)
 
-	srv.StopServer()
+	srv1.StopServer()
 }
 
-func TestBaseServer_Server_err(t *testing.T) {
+func TestBaseServer_Serve_err(t *testing.T) {
 	c := NewDefaultBaseConfig()
 	c.ServerPort = 10000000 // bad port
 	srv := &pingPong{NewBaseServer(c)}
 	registerFunc := func(s *grpc.Server) { test.RegisterPingPongServer(s, srv) }
 
-	err := srv.Serve(registerFunc)
+	up := make(chan *pingPong, 1)
+	err := srv.Serve(registerFunc, func() { up <- srv })
 	assert.NotNil(t, err)
 }
 

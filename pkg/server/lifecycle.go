@@ -21,21 +21,21 @@ const (
 )
 
 // Start starts the server and eviction routines.
-func Start(config *Config) error {
+func Start(config *Config, up chan *Courier) error {
 	c, err := newCourier(config)
 	if err != nil {
 		return err
 	}
 
-	// start courier aux routines
+	// start Courier aux routines
 	go c.startEvictor()
 	go c.startLibriPutter()
 
 	registerServer := func(s *grpc.Server) { api.RegisterCourierServer(s, c) }
-	return c.Serve(registerServer)
+	return c.Serve(registerServer, func() { up <- c })
 }
 
-func (c *courier) startEvictor() {
+func (c *Courier) startEvictor() {
 	// monitor non-fatal errors, sending fatal err if too many
 	errs := make(chan error, 2) // non-fatal errs and nils
 	fatal := make(chan error)   // signals fatal end
@@ -70,7 +70,7 @@ func (c *courier) startEvictor() {
 	}
 }
 
-func (c *courier) startLibriPutter() {
+func (c *Courier) startLibriPutter() {
 	// monitor non-fatal errors, sending fatal err if too many
 	errs := make(chan error, 2*c.config.NLibriPutters)  // non-fatal errs and nils
 	fatal := make(chan error, 2*c.config.NLibriPutters) // signals fatal end
@@ -130,7 +130,7 @@ func (c *courier) startLibriPutter() {
 	wg1.Wait()
 }
 
-func (c *courier) handleRunningErr(err error, errs chan error, logMsg string, key string) bool {
+func (c *Courier) handleRunningErr(err error, errs chan error, logMsg string, key string) bool {
 	select {
 	case errs <- err:
 	default:

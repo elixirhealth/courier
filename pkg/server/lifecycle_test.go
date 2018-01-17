@@ -14,7 +14,23 @@ import (
 	"google.golang.org/grpc"
 )
 
-// TODO (drausin) add Start test when have in-memory Cache
+func TestStart(t *testing.T) {
+	up := make(chan *Courier, 1)
+	wg1 := new(sync.WaitGroup)
+	wg1.Add(1)
+	go func(wg2 *sync.WaitGroup) {
+		defer wg2.Done()
+		err := Start(NewDefaultConfig(), up)
+		assert.Nil(t, err)
+	}(wg1)
+
+	time.Sleep(100 * time.Millisecond)
+	c := <-up
+	assert.NotNil(t, c)
+
+	c.StopServer()
+	wg1.Wait()
+}
 
 func TestCourier_startEvictor(t *testing.T) {
 	c, err := newCourier(NewDefaultConfig())
@@ -48,7 +64,7 @@ func TestCourier_startLibriPutter_ok(t *testing.T) {
 	testPub := &fixedPublisher{}
 	c.publisher = testPub
 	c.libriPutQueue <- key.String()
-	go c.Serve(func(s *grpc.Server) {})
+	go c.Serve(func(s *grpc.Server) {}, func() {})
 	c.WaitUntilStarted()
 
 	wg1 := new(sync.WaitGroup)
@@ -83,7 +99,7 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	for i := 0; i < libriPutterErrQueueSize; i++ {
 		c.libriPutQueue <- key.String()
 	}
-	go c.Serve(func(s *grpc.Server) {})
+	go c.Serve(func(s *grpc.Server) {}, func() {})
 	c.WaitUntilStarted()
 	c.startLibriPutter()
 	assert.Equal(t, uint(0), testPub.nPubs)
@@ -96,7 +112,7 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	for i := 0; i < libriPutterErrQueueSize; i++ {
 		c.libriPutQueue <- "some key"
 	}
-	go c.Serve(func(s *grpc.Server) {})
+	go c.Serve(func(s *grpc.Server) {}, func() {})
 	c.WaitUntilStarted()
 	c.startLibriPutter()
 	assert.Equal(t, uint(0), testPub.nPubs)
@@ -112,7 +128,7 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	for i := 0; i < libriPutterErrQueueSize; i++ {
 		c.libriPutQueue <- "some key"
 	}
-	go c.Serve(func(s *grpc.Server) {})
+	go c.Serve(func(s *grpc.Server) {}, func() {})
 	c.WaitUntilStarted()
 	c.startLibriPutter()
 	assert.Equal(t, uint(0), testPub.nPubs)
@@ -130,7 +146,7 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	for i := 0; i < libriPutterErrQueueSize; i++ {
 		c.libriPutQueue <- "some key"
 	}
-	go c.Serve(func(s *grpc.Server) {})
+	go c.Serve(func(s *grpc.Server) {}, func() {})
 	c.WaitUntilStarted()
 	c.startLibriPutter()
 	assert.True(t, testPub.nPubs > 0)
@@ -164,6 +180,11 @@ type fixedAccessRecorder struct {
 	nextEvictions       []string
 	getEvictionBatchErr error
 	nLibriPuts          uint
+	evictErr            error
+}
+
+func (r *fixedAccessRecorder) Evict(keys []string) error {
+	return r.evictErr
 }
 
 func (r *fixedAccessRecorder) CachePut(key string) error {

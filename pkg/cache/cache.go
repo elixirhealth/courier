@@ -21,6 +21,7 @@ const (
 const (
 	defaultStorage              = InMemory
 	defaultRecentWindow         = time.Hour * 24 * 7
+	defaultLRUCacheSize         = 1e4
 	defaultEvictionBatchSize    = uint(100)
 	defaultEvictionPeriod       = 30 * time.Minute
 	defaultEvictionQueryTimeout = 5 * time.Second
@@ -54,14 +55,21 @@ type AccessRecorder interface {
 	// LibriPut updates the access record's latest libri put time.
 	LibriPut(key string) error
 
-	// GetNextEvictions gets the next batch of keys for documents to evict.
+	// GetNextEvictions gets the next batch of keys for documents to evict, which is determines
+	// by documents satisfying
+	// - before recent window
+	// - put into libri
+	// - gotten least recently
 	GetNextEvictions() ([]string, error)
+
+	Evict(keys []string) error
 }
 
 // Parameters defines the parameters used by the cache implementation.
 type Parameters struct {
 	StorageType          StorageType
 	RecentWindow         time.Duration
+	LRUCacheSize         uint
 	EvictionBatchSize    uint
 	EvictionPeriod       time.Duration
 	EvictionQueryTimeout time.Duration
@@ -72,8 +80,19 @@ func NewDefaultParameters() *Parameters {
 	return &Parameters{
 		StorageType:          defaultStorage,
 		RecentWindow:         defaultRecentWindow,
+		LRUCacheSize:         defaultLRUCacheSize,
 		EvictionBatchSize:    defaultEvictionBatchSize,
 		EvictionPeriod:       defaultEvictionPeriod,
 		EvictionQueryTimeout: defaultEvictionQueryTimeout,
 	}
+}
+
+// AccessRecord contains access times for Puts and Gets for a particular document. It is only
+// exported so the DataStore API can reflect on it.
+type AccessRecord struct {
+	CachePutDateEarliest int64     `datastore:"cache_put_date_earliest"`
+	CachePutTimeEarliest time.Time `datastore:"cache_put_time_earliest,noindex"`
+	LibriPutOccurred     bool      `datastore:"libri_put_occurred"`
+	LibriPutTimeEarliest time.Time `datastore:"libri_put_time_earliest,noindex"`
+	CacheGetTimeLatest   time.Time `datastore:"cache_get_time_latest,noindex"`
 }

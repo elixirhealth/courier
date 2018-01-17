@@ -3,6 +3,12 @@ package server
 import (
 	"github.com/drausin/libri/libri/common/ecid"
 	"github.com/elxirhealth/courier/pkg/cache"
+	"github.com/pkg/errors"
+)
+
+var (
+	// ErrInvalidCacheStorageType indicates when a storage type is not expected.
+	ErrInvalidCacheStorageType = errors.New("invalid cache storage type")
 )
 
 func getClientID(config *Config) (ecid.ID, error) {
@@ -13,14 +19,17 @@ func getClientID(config *Config) (ecid.ID, error) {
 }
 
 func getCache(config *Config) (cache.Cache, cache.AccessRecorder, error) {
-	if config.Cache.StorageType == cache.DataStore {
-		dsCache, ar, err := cache.NewDatastore(config.GCPProjectID, config.Cache)
+	switch config.Cache.StorageType {
+	case cache.DataStore:
+		c, ar, err := cache.NewDatastore(config.GCPProjectID, config.Cache)
 		if err != nil {
 			return nil, nil, err
 		}
-		return dsCache, ar, nil
+		return c, ar, nil
+	case cache.InMemory:
+		c, ar := cache.NewMemory(config.Cache)
+		return c, ar, nil
+	default:
+		return nil, nil, ErrInvalidCacheStorageType
 	}
-
-	// TODO (drausin) add default in-memory Cache
-	return nil, nil, nil
 }

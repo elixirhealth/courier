@@ -32,7 +32,8 @@ var (
 	ErrFullLibriPutQueue = errors.New("full libri Put queue")
 )
 
-type courier struct {
+// Courier implements the CourierServer interface.
+type Courier struct {
 	*server.BaseServer
 
 	clientID       ecid.ID
@@ -47,7 +48,7 @@ type courier struct {
 }
 
 // newCourier creates a new CourierServer from the given config.
-func newCourier(config *Config) (*courier, error) {
+func newCourier(config *Config) (*Courier, error) {
 	clientID, err := getClientID(config)
 	if err != nil {
 		return nil, err
@@ -69,7 +70,7 @@ func newCourier(config *Config) (*courier, error) {
 	}
 	acquirer := publish.NewAcquirer(clientID, client.NewSigner(clientID.Key()), pubParams)
 	baseServer := server.NewBaseServer(config.BaseConfig)
-	return &courier{
+	return &Courier{
 		BaseServer:     baseServer,
 		clientID:       clientID,
 		cache:          c,
@@ -82,7 +83,7 @@ func newCourier(config *Config) (*courier, error) {
 }
 
 // Put puts a value into the Cache and libri network.
-func (c *courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse, error) {
+func (c *Courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse, error) {
 	if err := api.ValidatePutRequest(rq); err != nil {
 		return nil, err
 	}
@@ -120,7 +121,7 @@ func (c *courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 }
 
 // Get retrieves a value from the Cache or libri network, if it exists.
-func (c *courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse, error) {
+func (c *Courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse, error) {
 	if err := api.ValidateGetRequest(rq); err != nil {
 		return nil, err
 	}

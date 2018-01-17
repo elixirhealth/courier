@@ -30,7 +30,7 @@ const (
 	DefaultLibrarianHost = "localhost"
 )
 
-// Config is the config for a courier instance.
+// Config is the config for a Courier instance.
 type Config struct {
 	*server.BaseConfig
 	LibriGetTimeout   time.Duration
