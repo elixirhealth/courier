@@ -17,34 +17,10 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
-)
-
-const (
-	// DefaultMaxConcurrentStreams defines the maximum number of concurrent streams for each
-	// server transport.
-	DefaultMaxConcurrentStreams = uint32(128)
-
-	// DefaultServerPort is the default port on which the main server listens.
-	DefaultServerPort = 10100
-
-	// DefaultMetricsPort is the default port for Prometheus metrics.
-	DefaultMetricsPort = 10101
-
-	// DefaultProfilerPort is the default port for profiler requests.
-	DefaultProfilerPort = 10102
-
-	// DefaultLogLevel is the default log level to use.
-	DefaultLogLevel = zap.InfoLevel
-
-	// DefaultProfile is the default setting for whether the profiler is enabled.
-	DefaultProfile = false
-
-	postListenNotifyWait = 100 * time.Millisecond
 )
 
 // State defines the state of the server. The state follows a finite state machine of
@@ -64,28 +40,6 @@ const (
 	// Stopped indicates that the server has stopped.
 	Stopped
 )
-
-// BaseConfig contains params needed for the base server.
-type BaseConfig struct {
-	ServerPort           uint
-	MetricsPort          uint
-	ProfilerPort         uint
-	MaxConcurrentStreams uint32
-	LogLevel             zapcore.Level
-	Profile              bool
-}
-
-// NewDefaultBaseConfig creates a new default BaseConfig.
-func NewDefaultBaseConfig() *BaseConfig {
-	return &BaseConfig{
-		ServerPort:           DefaultServerPort,
-		MetricsPort:          DefaultMetricsPort,
-		ProfilerPort:         DefaultProfilerPort,
-		MaxConcurrentStreams: DefaultMaxConcurrentStreams,
-		LogLevel:             DefaultLogLevel,
-		Profile:              DefaultProfile,
-	}
-}
 
 // BaseServer is the base server components.
 type BaseServer struct {

@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/rand"
+	"math/big"
 	"sync"
 	"time"
 
@@ -47,6 +49,10 @@ func (c *Courier) startEvictor() {
 		c.StopServer()
 	}()
 
+	maxInitialWait := int64(c.config.Cache.EvictionPeriod)
+	initialWait, err := rand.Int(rand.Reader, big.NewInt(maxInitialWait))
+	errs <- err
+	time.Sleep(time.Duration(initialWait.Int64()))
 	for {
 		pause := make(chan struct{})
 		go func() {
@@ -62,7 +68,7 @@ func (c *Courier) startEvictor() {
 		if c.BaseServer.State() >= server.Stopping {
 			return
 		}
-		err := c.cache.EvictNext()
+		err = c.cache.EvictNext()
 		errs <- err
 		if err != nil {
 			c.Logger.Error("error evicting next batch", zap.Error(err))
@@ -96,6 +102,8 @@ func (c *Courier) startLibriPutter() {
 				if c.BaseServer.State() >= server.Stopping {
 					return
 				}
+				c.Logger.Debug("publishing document to libri",
+					zap.String(logDocKey, key))
 				docBytes, err := c.cache.Get(key)
 
 				msg = "error getting document from cache"
@@ -122,7 +130,7 @@ func (c *Courier) startLibriPutter() {
 				}
 
 				c.Logger.Info("published document to libri",
-					zap.Stringer(LoggerDocKey, docKey),
+					zap.Stringer(logDocKey, docKey),
 				)
 			}
 		}(wg1, i)
@@ -137,7 +145,7 @@ func (c *Courier) handleRunningErr(err error, errs chan error, logMsg string, ke
 	}
 	if err != nil {
 		c.Logger.Error("error getting document from cache",
-			zap.String(LoggerDocKey, key),
+			zap.String(logDocKey, key),
 			zap.Error(err),
 		)
 		return false

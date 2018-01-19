@@ -4,6 +4,7 @@ import (
 	"github.com/drausin/libri/libri/common/ecid"
 	"github.com/elxirhealth/courier/pkg/cache"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 var (
@@ -18,10 +19,10 @@ func getClientID(config *Config) (ecid.ID, error) {
 	return ecid.NewRandom(), nil
 }
 
-func getCache(config *Config) (cache.Cache, cache.AccessRecorder, error) {
+func getCache(config *Config, logger *zap.Logger) (cache.Cache, cache.AccessRecorder, error) {
 	switch config.Cache.StorageType {
 	case cache.DataStore:
-		c, ar, err := cache.NewDatastore(config.GCPProjectID, config.Cache)
+		c, ar, err := cache.NewDatastore(config.GCPProjectID, config.Cache, logger)
 		if err != nil {
 			return nil, nil, err
 		}

@@ -291,6 +291,7 @@ func TestKeyGetTimes(t *testing.T) {
 	}
 	heap.Init(x)
 	heap.Push(x, keyGetTime{key: "d", getTime: now.Add(4 * time.Second)})
+	assert.Equal(t, 4, x.Len())
 
 	x1 := heap.Pop(x).(keyGetTime)
 	x2 := heap.Pop(x).(keyGetTime)

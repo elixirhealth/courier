@@ -24,7 +24,9 @@ func TestNewCourier_ok(t *testing.T) {
 	assert.NotNil(t, c.clientID)
 	assert.NotNil(t, c.cache)
 	assert.NotNil(t, c.getter)
+	assert.NotNil(t, c.putter)
 	assert.NotNil(t, c.acquirer)
+	assert.NotNil(t, c.publisher)
 	assert.NotNil(t, c.libriPutQueue)
 	assert.Equal(t, config, c.config)
 }
