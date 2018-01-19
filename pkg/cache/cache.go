@@ -110,6 +110,7 @@ func newCachePutAccessRecord() *AccessRecord {
 	}
 }
 
+// MarshalLogObject marshals to the access record to the object encoder.
 func (r *AccessRecord) MarshalLogObject(oe zapcore.ObjectEncoder) error {
 	oe.AddInt64(logCachePutDateEarliest, r.CachePutDateEarliest)
 	oe.AddString(logCachePutDateEarliestISO,

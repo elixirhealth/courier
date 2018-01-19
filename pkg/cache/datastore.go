@@ -248,6 +248,7 @@ func (r *datastoreAccessRecorder) GetNextEvictions() ([]string, error) {
 			break
 		}
 		if err != nil {
+			cancel()
 			return nil, err
 		}
 		heap.Push(evict, keyGetTime{key: key.Name, getTime: record.CacheGetTimeLatest})
