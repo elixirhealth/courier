@@ -59,3 +59,10 @@ func evictableValuesFields(nEvictable, nToEvict int, p *Parameters) []zapcore.Fi
 		zap.Uint(logEvictionBatchSize, p.EvictionBatchSize),
 	}
 }
+
+func accessRecordFields(key string, value *AccessRecord) []zapcore.Field {
+	return []zapcore.Field{
+		zap.String(logKey, key),
+		zap.Object(logValue, value),
+	}
+}

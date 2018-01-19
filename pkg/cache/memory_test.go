@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"container/heap"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -9,15 +8,19 @@ import (
 	"time"
 
 	"github.com/drausin/libri/libri/common/id"
+	"github.com/drausin/libri/libri/common/logging"
 	"github.com/elxirhealth/courier/pkg/base/util"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestMemoryCache_PutGet_ok(t *testing.T) {
+	lg := zap.NewNop()
 	rng := rand.New(rand.NewSource(0))
 	params := NewDefaultParameters()
-	c, ar := NewMemory(params)
+	c, ar := NewMemory(params, lg)
 	valueSizes := []int{1024, 512 * 1024, 1024 * 1024, 2 * 1024 * 1024}
 
 	for _, valueSize := range valueSizes {
@@ -52,14 +55,15 @@ func TestMemoryCache_PutGet_ok(t *testing.T) {
 
 func TestMemoryCache_Put_err(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
+	lg := zap.NewNop()
 
 	// bad key
-	c, _ := NewMemory(NewDefaultParameters())
+	c, _ := NewMemory(NewDefaultParameters(), lg)
 	err := c.Put("too short key", []byte{})
 	assert.Equal(t, ErrInvalidKeySize, err)
 
 	// different values for same key
-	c, _ = NewMemory(NewDefaultParameters())
+	c, _ = NewMemory(NewDefaultParameters(), lg)
 	key := fmt.Sprintf("%x", util.RandBytes(rng, id.Length))
 	err = c.Put(key, []byte("value 1"))
 	assert.Nil(t, err)
@@ -73,6 +77,7 @@ func TestMemoryCache_Put_err(t *testing.T) {
 	c = &memoryCache{
 		accessRecorder: ar,
 		docs:           make(map[string][]byte),
+		logger:         lg,
 	}
 	err = c.Put(key, []byte("value 1"))
 	assert.NotNil(t, err)
@@ -80,7 +85,8 @@ func TestMemoryCache_Put_err(t *testing.T) {
 
 func TestMemoryCache_Get_err(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
-	c, _ := NewMemory(NewDefaultParameters())
+	lg := zap.NewNop()
+	c, _ := NewMemory(NewDefaultParameters(), lg)
 	key := fmt.Sprintf("%x", util.RandBytes(rng, id.Length))
 
 	// missing value for key
@@ -95,6 +101,7 @@ func TestMemoryCache_Get_err(t *testing.T) {
 	c = &memoryCache{
 		accessRecorder: ar,
 		docs:           make(map[string][]byte),
+		logger:         lg,
 	}
 	err = c.Put(key, []byte("value 1"))
 	assert.Nil(t, err)
@@ -104,19 +111,31 @@ func TestMemoryCache_Get_err(t *testing.T) {
 }
 
 func TestMemoryCache_EvictNext_ok(t *testing.T) {
+	lg := zap.NewNop()
 	evictionKeys := []string{"key1", "key2"}
 	ar := &fixedAccessRecorder{
-		nextEvictions: evictionKeys,
+		nextEvictions: []string{},
 	}
 	c := &memoryCache{
+		accessRecorder: ar,
+		logger:         lg,
+	}
+	err := c.EvictNext()
+	assert.Nil(t, err)
+
+	ar = &fixedAccessRecorder{
+		nextEvictions: evictionKeys,
+	}
+	c = &memoryCache{
 		accessRecorder: ar,
 		docs: map[string][]byte{
 			"key1": []byte("value1"),
 			"key2": []byte("value2"),
 			"key3": []byte("value3"),
 		},
+		logger: lg,
 	}
-	err := c.EvictNext()
+	err = c.EvictNext()
 	assert.Nil(t, err)
 
 	assert.Len(t, c.docs, 1)
@@ -124,22 +143,26 @@ func TestMemoryCache_EvictNext_ok(t *testing.T) {
 }
 
 func TestMemoryCache_EvictNext_err(t *testing.T) {
+	lg := zap.NewNop()
 	// check GetNextEvictions error bubbles up
 	ar := &fixedAccessRecorder{
 		getEvictionBatchErr: errors.New("some error"),
 	}
 	c := &memoryCache{
 		accessRecorder: ar,
+		logger:         lg,
 	}
 	err := c.EvictNext()
 	assert.NotNil(t, err)
 
 	// check accessRecorder.Evict error bubbes up
 	ar = &fixedAccessRecorder{
-		evictErr: errors.New("some evict error"),
+		nextEvictions: []string{"key1", "key2"},
+		evictErr:      errors.New("some evict error"),
 	}
 	c = &memoryCache{
 		accessRecorder: ar,
+		logger:         lg,
 	}
 	err = c.EvictNext()
 	assert.NotNil(t, err)
@@ -151,13 +174,18 @@ func TestMemoryCache_EvictNext_err(t *testing.T) {
 	c = &memoryCache{
 		accessRecorder: ar,
 		docs:           make(map[string][]byte),
+		logger:         lg,
 	}
 	err = c.EvictNext()
 	assert.NotNil(t, err)
 }
 
 func TestMemoryAccessRecorder_CachePut(t *testing.T) {
-	ar := &memoryAccessRecorder{records: make(map[string]*AccessRecord)}
+	lg := zap.NewNop()
+	ar := &memoryAccessRecorder{
+		records: make(map[string]*AccessRecord),
+		logger:  lg,
+	}
 	key := "some key"
 	err := ar.CachePut(key)
 	assert.Nil(t, err)
@@ -173,7 +201,11 @@ func TestMemoryAccessRecorder_CachePut(t *testing.T) {
 }
 
 func TestMemoryAccessRecorder_CacheGet(t *testing.T) {
-	ar := &memoryAccessRecorder{records: make(map[string]*AccessRecord)}
+	lg := zap.NewNop()
+	ar := &memoryAccessRecorder{
+		records: make(map[string]*AccessRecord),
+		logger:  lg,
+	}
 	key := "some key"
 	err := ar.CachePut(key)
 	assert.Nil(t, err)
@@ -188,8 +220,12 @@ func TestMemoryAccessRecorder_CacheGet(t *testing.T) {
 	assert.Equal(t, ErrMissingValue, err)
 }
 
-func TestMemoryAccessRecorder_CacheEvict(t *testing.T) {
-	ar := &memoryAccessRecorder{records: make(map[string]*AccessRecord)}
+func TestMemoryAccessRecorder_CacheEvict_ok(t *testing.T) {
+	lg := zap.NewNop()
+	ar := &memoryAccessRecorder{
+		records: make(map[string]*AccessRecord),
+		logger:  lg,
+	}
 	keys := []string{"key1", "key2", "key3"}
 	for _, key := range keys {
 		err := ar.CachePut(key)
@@ -207,8 +243,22 @@ func TestMemoryAccessRecorder_CacheEvict(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestMemoryAccessRecorder_CacheEvict_err(t *testing.T) {
+	lg := zap.NewNop()
+	ar := &memoryAccessRecorder{
+		records: make(map[string]*AccessRecord),
+		logger:  lg,
+	}
+	err := ar.CacheEvict([]string{"key1", "key2"})
+	assert.Equal(t, ErrMissingValue, err)
+}
+
 func TestMemoryAccessRecorder_LibriPut(t *testing.T) {
-	ar := &memoryAccessRecorder{records: make(map[string]*AccessRecord)}
+	lg := zap.NewNop()
+	ar := &memoryAccessRecorder{
+		records: make(map[string]*AccessRecord),
+		logger:  lg,
+	}
 	key := "some key"
 	err := ar.CachePut(key)
 	assert.Nil(t, err)
@@ -225,11 +275,13 @@ func TestMemoryAccessRecorder_LibriPut(t *testing.T) {
 }
 
 func TestGetNextEvictions(t *testing.T) {
+	lg := server.NewDevLogger(zapcore.DebugLevel)
 	now := time.Now()
 	ar := &memoryAccessRecorder{
 		params: &Parameters{
 			RecentWindow:      10 * time.Minute,
 			EvictionBatchSize: 2,
+			LRUCacheSize:      2,
 		},
 		records: map[string]*AccessRecord{
 			// not evicted b/c put too recently
@@ -244,25 +296,38 @@ func TestGetNextEvictions(t *testing.T) {
 				CacheGetTimeLatest:   now.Add(-time.Second),
 				LibriPutOccurred:     false,
 			},
-			// evicted in first batch
+			// evictable & evicted in first batch
 			"key3": {
+				CachePutDateEarliest: now.Add(-36*time.Hour).Unix() / secsPerDay,
+				CacheGetTimeLatest:   now.Add(-6 * time.Second),
+				LibriPutOccurred:     true,
+			},
+			// evictable & evicted in first batch
+			"key4": {
+				CachePutDateEarliest: now.Add(-40*time.Hour).Unix() / secsPerDay,
+				CacheGetTimeLatest:   now.Add(-5 * time.Second),
+				LibriPutOccurred:     true,
+			},
+			// evictable & evicted in second batch
+			"key5": {
+				CachePutDateEarliest: now.Add(-36*time.Hour).Unix() / secsPerDay,
+				CacheGetTimeLatest:   now.Add(-4 * time.Second),
+				LibriPutOccurred:     true,
+			},
+			// evictable but not evicted b/c of LRU cache
+			"key6": {
 				CachePutDateEarliest: now.Add(-36*time.Hour).Unix() / secsPerDay,
 				CacheGetTimeLatest:   now.Add(-3 * time.Second),
 				LibriPutOccurred:     true,
 			},
-			// evicted in first batch
-			"key4": {
-				CachePutDateEarliest: now.Add(-40*time.Hour).Unix() / secsPerDay,
+			// evictable but not evicted b/c of LRU cache
+			"key7": {
+				CachePutDateEarliest: now.Add(-36*time.Hour).Unix() / secsPerDay,
 				CacheGetTimeLatest:   now.Add(-2 * time.Second),
 				LibriPutOccurred:     true,
 			},
-			// evicted in second batch
-			"key5": {
-				CachePutDateEarliest: now.Add(-36*time.Hour).Unix() / secsPerDay,
-				CacheGetTimeLatest:   now.Add(-1 * time.Second),
-				LibriPutOccurred:     true,
-			},
 		},
+		logger: lg,
 	}
 
 	keys, err := ar.GetNextEvictions()
@@ -282,28 +347,28 @@ func TestGetNextEvictions(t *testing.T) {
 
 }
 
-func TestKeyGetTimes(t *testing.T) {
-	now := time.Now()
-	x := &keyGetTimes{
-		{key: "b", getTime: now.Add(2 * time.Second)},
-		{key: "a", getTime: now.Add(1 * time.Second)},
-		{key: "c", getTime: now.Add(3 * time.Second)},
+func TestMemoryAccessRecorder_Evict_ok(t *testing.T) {
+	lg := zap.NewNop()
+	keys := []string{"key1", "key2"}
+	ds := memoryAccessRecorder{
+		records: map[string]*AccessRecord{
+			"key1": newCachePutAccessRecord(),
+			"key2": newCachePutAccessRecord(),
+		},
+		logger: lg,
 	}
-	heap.Init(x)
-	heap.Push(x, keyGetTime{key: "d", getTime: now.Add(4 * time.Second)})
-	assert.Equal(t, 4, x.Len())
+	err := ds.Evict(keys)
+	assert.Nil(t, err)
+	assert.Len(t, ds.records, 0)
+}
 
-	x1 := heap.Pop(x).(keyGetTime)
-	x2 := heap.Pop(x).(keyGetTime)
-	x3 := heap.Pop(x).(keyGetTime)
-	x4 := heap.Pop(x).(keyGetTime)
-
-	assert.Equal(t, "d", x1.key)
-	assert.Equal(t, "c", x2.key)
-	assert.Equal(t, "b", x3.key)
-	assert.Equal(t, "a", x4.key)
-
-	assert.True(t, x1.getTime.After(x2.getTime))
-	assert.True(t, x2.getTime.After(x3.getTime))
-	assert.True(t, x3.getTime.After(x4.getTime))
+func TestMemoryAccessRecorder_Evict_err(t *testing.T) {
+	lg := zap.NewNop()
+	keys := []string{"key1", "key2"}
+	ds := memoryAccessRecorder{
+		records: map[string]*AccessRecord{},
+		logger:  lg,
+	}
+	err := ds.Evict(keys)
+	assert.Equal(t, ErrMissingValue, err)
 }

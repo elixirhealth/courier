@@ -162,7 +162,10 @@ func TestCourier_Get_ok(t *testing.T) {
 
 	// when Cache has doc, Get should return it
 	cc := &fixedCache{value: valueBytes}
-	c := &Courier{cache: cc}
+	c := &Courier{
+		BaseServer: server.NewBaseServer(server.NewDefaultBaseConfig()),
+		cache:      cc,
+	}
 	rp, err := c.Get(context.Background(), rq)
 	assert.Nil(t, err)
 	assert.Equal(t, value, rp.Value)
@@ -172,8 +175,9 @@ func TestCourier_Get_ok(t *testing.T) {
 	cc = &fixedCache{getErr: cache.ErrMissingValue}
 	acq := &fixedAcquirer{doc: value}
 	c = &Courier{
-		cache:    cc,
-		acquirer: acq,
+		BaseServer: server.NewBaseServer(server.NewDefaultBaseConfig()),
+		cache:      cc,
+		acquirer:   acq,
 	}
 	rp, err = c.Get(context.Background(), rq)
 	assert.Nil(t, err)
@@ -238,6 +242,7 @@ func TestCourier_Get_err(t *testing.T) {
 	}
 
 	for desc, c := range cases {
+		c.c.BaseServer = server.NewBaseServer(server.NewDefaultBaseConfig())
 		rp, err := c.c.Get(context.Background(), c.rq)
 		assert.Nil(t, rp, desc)
 		if c.err != nil {

@@ -28,7 +28,7 @@ func getCache(config *Config, logger *zap.Logger) (cache.Cache, cache.AccessReco
 		}
 		return c, ar, nil
 	case cache.InMemory:
-		c, ar := cache.NewMemory(config.Cache)
+		c, ar := cache.NewMemory(config.Cache, logger)
 		return c, ar, nil
 	default:
 		return nil, nil, ErrInvalidCacheStorageType

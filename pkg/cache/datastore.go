@@ -107,8 +107,11 @@ func (c *datastoreCache) Put(key string, value []byte) error {
 	if _, err = c.client.put(dsKey, docValue); err != nil {
 		return err
 	}
-	defer logger.Debug("put into cache")
-	return c.accessRecorder.CachePut(key)
+	if err = c.accessRecorder.CachePut(key); err != nil {
+		return err
+	}
+	logger.Debug("put into cache")
+	return nil
 }
 
 // Get retrieves the marshaled document value of the given hex key.
@@ -127,7 +130,7 @@ func (c *datastoreCache) Get(key string) ([]byte, error) {
 	if err := c.accessRecorder.CacheGet(key); err != nil {
 		return nil, err
 	}
-	defer logger.Debug("got value from cache")
+	logger.Debug("got value from cache")
 	return joinValue(existingCacheValue), nil
 }
 
@@ -175,20 +178,8 @@ func (r *datastoreAccessRecorder) CachePut(key string) error {
 	}
 	value := newCachePutAccessRecord()
 	_, err = r.client.put(dsKey, value)
-	r.logger.Debug("put new access record",
-		zap.String(logKey, key),
-		zap.Object(logValue, value),
-	)
+	r.logger.Debug("put new access record", accessRecordFields(key, value)...)
 	return err
-}
-
-func newCachePutAccessRecord() *AccessRecord {
-	now := time.Now()
-	return &AccessRecord{
-		CachePutDateEarliest: now.Unix() / secsPerDay,
-		CachePutTimeEarliest: now,
-		LibriPutOccurred:     false,
-	}
 }
 
 // CacheGet updates the access record's latest get time for the document with the given key.
@@ -236,7 +227,7 @@ func (r *datastoreAccessRecorder) GetNextEvictions() ([]string, error) {
 		// don't evict anything since cache size smaller than size limit
 		r.logger.Debug("fewer evictable values than cache size",
 			nextEvictionsFields(nEvictable, r.params.LRUCacheSize)...)
-		return []string{}, err
+		return []string{}, nil
 	}
 	nToEvict := nEvictable - int(r.params.LRUCacheSize)
 	if nToEvict > int(r.params.EvictionBatchSize) {
