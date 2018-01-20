@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"sort"
 	"testing"
 	"time"
 
@@ -12,18 +13,23 @@ import (
 	"github.com/drausin/libri/libri/common/id"
 	"github.com/elxirhealth/courier/pkg/base/util"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
+	"google.golang.org/api/iterator"
 )
 
 func TestDatastoreCache_PutGet_ok(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
+	lg := zap.NewNop()
 	valueSizes := []int{1024, 512 * 1024, 1024 * 1024, 2 * 1024 * 1024}
 
 	for _, valueSize := range valueSizes {
 		accessRecorderDSClient := &fixedDatastoreClient{}
 		ds := datastoreCache{
 			client: &fixedDatastoreClient{},
+			logger: lg,
 			accessRecorder: &datastoreAccessRecorder{
 				client: accessRecorderDSClient,
+				logger: lg,
 			},
 		}
 		value1 := util.RandBytes(rng, valueSize)
@@ -57,11 +63,13 @@ func TestDatastoreCache_PutGet_ok(t *testing.T) {
 
 func TestDatastoreCache_Put_err(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
+	lg := zap.NewNop()
 
 	// bad key
 	ds := &datastoreCache{
 		client:         &fixedDatastoreClient{},
 		accessRecorder: &fixedAccessRecorder{},
+		logger:         lg,
 	}
 	err := ds.Put("too short key", []byte{})
 	assert.Equal(t, ErrInvalidKeySize, err)
@@ -72,6 +80,7 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 			getErr: errors.New("some get error"),
 		},
 		accessRecorder: &fixedAccessRecorder{},
+		logger:         lg,
 	}
 	key := fmt.Sprintf("%x", util.RandBytes(rng, id.Length))
 	err = ds.Put(key, []byte{})
@@ -81,6 +90,7 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 	ds = &datastoreCache{
 		client:         &fixedDatastoreClient{},
 		accessRecorder: &fixedAccessRecorder{},
+		logger:         lg,
 	}
 	err = ds.Put(key, []byte("value 1"))
 	assert.Nil(t, err)
@@ -91,6 +101,7 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 	ds = &datastoreCache{
 		client:         &fixedDatastoreClient{},
 		accessRecorder: &fixedAccessRecorder{},
+		logger:         lg,
 	}
 	err = ds.Put(key, util.RandBytes(rng, 3.5*1024*1024))
 	assert.Equal(t, ErrValueTooLarge, err)
@@ -101,6 +112,7 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 			putErr: errors.New("some put error"),
 		},
 		accessRecorder: &fixedAccessRecorder{},
+		logger:         lg,
 	}
 	err = ds.Put(key, util.RandBytes(rng, 1024))
 	assert.NotNil(t, err)
@@ -111,6 +123,7 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 		accessRecorder: &fixedAccessRecorder{
 			cachePutErr: errors.New("some put error"),
 		},
+		logger: lg,
 	}
 	err = ds.Put(key, util.RandBytes(rng, 1024))
 	assert.NotNil(t, err)
@@ -118,6 +131,7 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 
 func TestDatastoreCache_Get_err(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
+	lg := zap.NewNop()
 
 	// missing doc error
 	ds := &datastoreCache{
@@ -125,6 +139,7 @@ func TestDatastoreCache_Get_err(t *testing.T) {
 			getErr: datastore.ErrNoSuchEntity,
 		},
 		accessRecorder: &fixedAccessRecorder{},
+		logger:         lg,
 	}
 	key := fmt.Sprintf("%x", util.RandBytes(rng, id.Length))
 	docBytes, err := ds.Get(key)
@@ -137,6 +152,7 @@ func TestDatastoreCache_Get_err(t *testing.T) {
 			getErr: errors.New("some get error"),
 		},
 		accessRecorder: &fixedAccessRecorder{},
+		logger:         lg,
 	}
 	key = fmt.Sprintf("%x", util.RandBytes(rng, id.Length))
 	docBytes, err = ds.Get(key)
@@ -153,6 +169,7 @@ func TestDatastoreCache_Get_err(t *testing.T) {
 		accessRecorder: &fixedAccessRecorder{
 			cacheGetErr: datastore.ErrNoSuchEntity,
 		},
+		logger: lg,
 	}
 	docBytes, err = ds.Get(key)
 	assert.Equal(t, datastore.ErrNoSuchEntity, err)
@@ -160,16 +177,29 @@ func TestDatastoreCache_Get_err(t *testing.T) {
 }
 
 func TestDatastoreCache_EvictNext_ok(t *testing.T) {
+	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{}
-	evictionKeys := []string{"key1", "key2"}
 	ar := &fixedAccessRecorder{
-		nextEvictions: evictionKeys,
+		nextEvictions: []string{}, // nothing to evict
 	}
 	dc := &datastoreCache{
 		client:         dsClient,
 		accessRecorder: ar,
+		logger:         lg,
 	}
 	err := dc.EvictNext()
+	assert.Nil(t, err)
+
+	evictionKeys := []string{"key1", "key2"}
+	ar = &fixedAccessRecorder{
+		nextEvictions: evictionKeys,
+	}
+	dc = &datastoreCache{
+		client:         dsClient,
+		accessRecorder: ar,
+		logger:         lg,
+	}
+	err = dc.EvictNext()
 	assert.Nil(t, err)
 	expectedDeleteKeys := []*datastore.Key{
 		datastore.NameKey(documentKind, "key1", nil),
@@ -180,12 +210,14 @@ func TestDatastoreCache_EvictNext_ok(t *testing.T) {
 }
 
 func TestDatastoreCache_EvictNext_err(t *testing.T) {
+	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{}
 	dc := &datastoreCache{
 		client: dsClient,
 		accessRecorder: &fixedAccessRecorder{
 			getEvictionBatchErr: errors.New("some getEvictionBatch error"),
 		},
+		logger: lg,
 	}
 	err := dc.EvictNext()
 	assert.NotNil(t, err)
@@ -193,16 +225,34 @@ func TestDatastoreCache_EvictNext_err(t *testing.T) {
 	dc = &datastoreCache{
 		client: dsClient,
 		accessRecorder: &fixedAccessRecorder{
-			evictErr: errors.New("some evict error"),
+			nextEvictions: []string{"key1", "key2"},
+			evictErr:      errors.New("some evict error"),
 		},
+		logger: lg,
+	}
+	err = dc.EvictNext()
+	assert.NotNil(t, err)
+
+	dc = &datastoreCache{
+		client: &fixedDatastoreClient{
+			deleteErr: errors.New("some delete error"),
+		},
+		accessRecorder: &fixedAccessRecorder{
+			nextEvictions: []string{"key1", "key2"},
+		},
+		logger: lg,
 	}
 	err = dc.EvictNext()
 	assert.NotNil(t, err)
 }
 
 func TestDatastoreAccessRecorder_CachePut_ok(t *testing.T) {
+	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{}
-	ds := &datastoreAccessRecorder{client: dsClient}
+	ds := &datastoreAccessRecorder{
+		client: dsClient,
+		logger: lg,
+	}
 	err := ds.CachePut("some key")
 	assert.Nil(t, err)
 	assert.NotZero(t, dsClient.value.(*AccessRecord).CachePutDateEarliest)
@@ -217,26 +267,37 @@ func TestDatastoreAccessRecorder_CachePut_ok(t *testing.T) {
 }
 
 func TestDatastoreAccessRecorder_CachePut_err(t *testing.T) {
+	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{
 		getErr: errors.New("some get error"),
 	}
-	ds := datastoreAccessRecorder{client: dsClient}
+	ds := datastoreAccessRecorder{
+		client: dsClient,
+		logger: lg,
+	}
 	err := ds.CachePut("some key")
 	assert.NotNil(t, err)
 
 	dsClient = &fixedDatastoreClient{
 		putErr: errors.New("some put error"),
 	}
-	ds = datastoreAccessRecorder{client: dsClient}
+	ds = datastoreAccessRecorder{
+		client: dsClient,
+		logger: lg,
+	}
 	err = ds.CachePut("some key")
 	assert.NotNil(t, err)
 }
 
 func TestDatastoreAccessRecorder_CacheGet(t *testing.T) {
+	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{
 		value: &AccessRecord{CachePutTimeEarliest: time.Now()},
 	}
-	ds := datastoreAccessRecorder{client: dsClient}
+	ds := datastoreAccessRecorder{
+		client: dsClient,
+		logger: lg,
+	}
 	err := ds.CacheGet("some key")
 	assert.Nil(t, err)
 	assert.NotZero(t, dsClient.value.(*AccessRecord).CachePutTimeEarliest)
@@ -245,10 +306,14 @@ func TestDatastoreAccessRecorder_CacheGet(t *testing.T) {
 }
 
 func TestDatastoreAccessRecorder_LibriPut(t *testing.T) {
+	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{
 		value: &AccessRecord{CachePutTimeEarliest: time.Now()},
 	}
-	ds := datastoreAccessRecorder{client: dsClient}
+	ds := datastoreAccessRecorder{
+		client: dsClient,
+		logger: lg,
+	}
 	err := ds.LibriPut("some key")
 	assert.Nil(t, err)
 	assert.NotZero(t, dsClient.value.(*AccessRecord).CachePutTimeEarliest)
@@ -257,9 +322,13 @@ func TestDatastoreAccessRecorder_LibriPut(t *testing.T) {
 	assert.Zero(t, dsClient.value.(*AccessRecord).CacheGetTimeLatest)
 }
 
-func TestDatastoreAccessRecorder_CacheEvict(t *testing.T) {
+func TestDatastoreAccessRecorder_CacheEvict_ok(t *testing.T) {
+	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{}
-	ds := datastoreAccessRecorder{client: dsClient}
+	ds := datastoreAccessRecorder{
+		client: dsClient,
+		logger: lg,
+	}
 	keyNames := []string{"key1", "key2"}
 	err := ds.CacheEvict(keyNames)
 	assert.Nil(t, err)
@@ -270,40 +339,67 @@ func TestDatastoreAccessRecorder_CacheEvict(t *testing.T) {
 	assert.Equal(t, expectedDeleteKeys, dsClient.deleteKeys)
 }
 
+func TestDatastoreAccessRecorder_CacheEvict_err(t *testing.T) {
+	lg := zap.NewNop()
+	dsClient := &fixedDatastoreClient{
+		deleteErr: errors.New("some delete error"),
+	}
+	ds := datastoreAccessRecorder{
+		client: dsClient,
+		logger: lg,
+	}
+	keyNames := []string{"key1", "key2"}
+	err := ds.CacheEvict(keyNames)
+	assert.NotNil(t, err)
+}
+
 func TestDatastoreAccessRecorder_GetNextEvictions_ok(t *testing.T) {
+	lg := zap.NewNop()
 	params := &Parameters{
 		RecentWindow:      24 * time.Hour,
 		LRUCacheSize:      2,
-		EvictionBatchSize: 3,
+		EvictionBatchSize: 2,
 	}
 
 	dsKeys := []*datastore.Key{
 		datastore.NameKey(accessRecordKind, "key1", nil),
 		datastore.NameKey(accessRecordKind, "key2", nil),
+		datastore.NameKey(accessRecordKind, "key3", nil),
 	}
 
 	// should have eviction when count value > LRU cache size
 	dsClient := &fixedDatastoreClient{
-		queryAllKeysResult: dsKeys,
-		countValue:         4,
+		countValue: 8,
 	}
+	now := time.Now()
 	ds := datastoreAccessRecorder{
 		client: dsClient,
+		iter: &fixedDatastoreIterator{
+			keys: dsKeys,
+			values: []*AccessRecord{
+				{CacheGetTimeLatest: now.Add(1 * time.Second)},
+				{CacheGetTimeLatest: now.Add(2 * time.Second)},
+				{CacheGetTimeLatest: now.Add(3 * time.Second)},
+			},
+		},
 		params: params,
+		logger: lg,
 	}
 	expected := []string{"key1", "key2"}
 	keys, err := ds.GetNextEvictions()
+	sort.Strings(keys)
 	assert.Nil(t, err)
 	assert.Equal(t, expected, keys)
 
 	// should not have any evictions when count value <= LRU cache size
 	dsClient = &fixedDatastoreClient{
-		queryAllKeysResult: dsKeys,
-		countValue:         2,
+		runResult:  &datastore.Iterator{},
+		countValue: 2,
 	}
 	ds = datastoreAccessRecorder{
 		client: dsClient,
 		params: params,
+		logger: lg,
 	}
 	keys, err = ds.GetNextEvictions()
 	assert.Nil(t, err)
@@ -311,6 +407,7 @@ func TestDatastoreAccessRecorder_GetNextEvictions_ok(t *testing.T) {
 }
 
 func TestDatastoreAccessRecorder_GetNextEvictions_err(t *testing.T) {
+	lg := zap.NewNop()
 	params := &Parameters{
 		RecentWindow:      24 * time.Hour,
 		LRUCacheSize:      2,
@@ -324,6 +421,7 @@ func TestDatastoreAccessRecorder_GetNextEvictions_err(t *testing.T) {
 	ds := datastoreAccessRecorder{
 		client: dsClient,
 		params: params,
+		logger: lg,
 	}
 	keys, err := ds.GetNextEvictions()
 	assert.NotNil(t, err)
@@ -331,12 +429,15 @@ func TestDatastoreAccessRecorder_GetNextEvictions_err(t *testing.T) {
 
 	// check queryAllKeys error bubbles up
 	dsClient = &fixedDatastoreClient{
-		countValue:      4,
-		queryAllKeysErr: errors.New("some queryAllKeys error"),
+		countValue: 4,
 	}
 	ds = datastoreAccessRecorder{
 		client: dsClient,
+		iter: &fixedDatastoreIterator{
+			err: errors.New("some iter error"),
+		},
 		params: params,
+		logger: lg,
 	}
 	keys, err = ds.GetNextEvictions()
 	assert.NotNil(t, err)
@@ -344,9 +445,11 @@ func TestDatastoreAccessRecorder_GetNextEvictions_err(t *testing.T) {
 }
 
 func TestDatastoreAccessRecorder_Evict_ok(t *testing.T) {
+	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{}
 	ds := datastoreAccessRecorder{
 		client: dsClient,
+		logger: lg,
 	}
 	keys := []string{"key1", "key2"}
 	err := ds.Evict(keys)
@@ -360,11 +463,13 @@ func TestDatastoreAccessRecorder_Evict_ok(t *testing.T) {
 }
 
 func TestDatastoreAccessRecorder_Evict_err(t *testing.T) {
+	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{
 		deleteErr: errors.New("some delete error"),
 	}
 	ds := datastoreAccessRecorder{
 		client: dsClient,
+		logger: lg,
 	}
 	keys := []string{"key1", "key2"}
 	err := ds.Evict(keys)
@@ -372,6 +477,7 @@ func TestDatastoreAccessRecorder_Evict_err(t *testing.T) {
 }
 
 func TestDatastoreAccessRecorder_update_err(t *testing.T) {
+	lg := zap.NewNop()
 	// no log for given key
 	dsClient := &fixedDatastoreClient{
 		getErr: datastore.ErrNoSuchEntity,
@@ -385,7 +491,10 @@ func TestDatastoreAccessRecorder_update_err(t *testing.T) {
 		value:  &AccessRecord{CachePutTimeEarliest: time.Now()},
 		putErr: errors.New("some put error"),
 	}
-	ds = datastoreAccessRecorder{client: dsClient}
+	ds = datastoreAccessRecorder{
+		client: dsClient,
+		logger: lg,
+	}
 	err = ds.LibriPut("some key")
 	assert.NotNil(t, err)
 }
@@ -427,15 +536,14 @@ func TestSplitJoinValue(t *testing.T) {
 }
 
 type fixedDatastoreClient struct {
-	value              interface{}
-	getErr             error
-	putErr             error
-	deleteErr          error
-	deleteKeys         []*datastore.Key
-	countValue         int
-	countErr           error
-	queryAllKeysResult []*datastore.Key
-	queryAllKeysErr    error
+	value      interface{}
+	getErr     error
+	putErr     error
+	deleteErr  error
+	deleteKeys []*datastore.Key
+	countValue int
+	countErr   error
+	runResult  *datastore.Iterator
 }
 
 func (f *fixedDatastoreClient) count(ctx context.Context, q *datastore.Query) (int, error) {
@@ -476,10 +584,29 @@ func (f *fixedDatastoreClient) delete(keys []*datastore.Key) error {
 	return f.deleteErr
 }
 
-func (f *fixedDatastoreClient) queryAllKeys(
-	ctx context.Context, q *datastore.Query,
-) ([]*datastore.Key, error) {
-	return f.queryAllKeysResult, f.queryAllKeysErr
+func (f *fixedDatastoreClient) run(ctx context.Context, q *datastore.Query) *datastore.Iterator {
+	return f.runResult
+}
+
+type fixedDatastoreIterator struct {
+	err    error
+	keys   []*datastore.Key
+	values []*AccessRecord
+	offset int
+}
+
+func (f *fixedDatastoreIterator) Init(iter *datastore.Iterator) {}
+
+func (f *fixedDatastoreIterator) Next(dst interface{}) (*datastore.Key, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	defer func() { f.offset++ }()
+	if f.offset == len(f.values) {
+		return nil, iterator.Done
+	}
+	dst.(*AccessRecord).CacheGetTimeLatest = f.values[f.offset].CacheGetTimeLatest
+	return f.keys[f.offset], nil
 }
 
 type fixedAccessRecorder struct {

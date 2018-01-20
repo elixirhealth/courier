@@ -16,6 +16,7 @@ import (
 	"github.com/elxirhealth/courier/pkg/cache"
 	api "github.com/elxirhealth/courier/pkg/courierapi"
 	"github.com/golang/protobuf/proto"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -49,11 +50,12 @@ type Courier struct {
 
 // newCourier creates a new CourierServer from the given config.
 func newCourier(config *Config) (*Courier, error) {
+	baseServer := server.NewBaseServer(config.BaseConfig)
 	clientID, err := getClientID(config)
 	if err != nil {
 		return nil, err
 	}
-	c, ar, err := getCache(config)
+	c, ar, err := getCache(config, baseServer.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -63,20 +65,25 @@ func newCourier(config *Config) (*Courier, error) {
 		return nil, err
 	}
 	getters := client.NewUniformGetterBalancer(librarians)
+	putters := client.NewUniformPutterBalancer(librarians)
 	getter := client.NewRetryGetter(getters, true, config.LibriGetTimeout)
+	putter := client.NewRetryPutter(putters, config.LibriPutTimeout)
+
 	pubParams := &publish.Parameters{
 		PutTimeout: config.LibriPutTimeout,
 		GetTimeout: config.LibriGetTimeout,
 	}
 	acquirer := publish.NewAcquirer(clientID, client.NewSigner(clientID.Key()), pubParams)
-	baseServer := server.NewBaseServer(config.BaseConfig)
+	publisher := publish.NewPublisher(clientID, client.NewSigner(clientID.Key()), pubParams)
 	return &Courier{
 		BaseServer:     baseServer,
 		clientID:       clientID,
 		cache:          c,
 		accessRecorder: ar,
 		getter:         getter,
+		putter:         putter,
 		acquirer:       acquirer,
+		publisher:      publisher,
 		libriPutQueue:  make(chan string, config.LibriPutQueueSize),
 		config:         config,
 	}, nil
@@ -84,6 +91,7 @@ func newCourier(config *Config) (*Courier, error) {
 
 // Put puts a value into the Cache and libri network.
 func (c *Courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse, error) {
+	c.Logger.Debug("received put request", zap.String(logKey, id.Hex(rq.Key)))
 	if err := api.ValidatePutRequest(rq); err != nil {
 		return nil, err
 	}
@@ -103,7 +111,9 @@ func (c *Courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 			// *should* never happen, but check just in case
 			return nil, ErrExistingNotEqualNewDocument
 		}
-		return &api.PutResponse{Operation: api.PutOperation_LEFT_EXISTING}, nil
+		rp := &api.PutResponse{Operation: api.PutOperation_LEFT_EXISTING}
+		c.Logger.Info("put document", putDocumentFields(rq, rp)...)
+		return rp, nil
 	}
 
 	// Cache doesn't have doc, so add it
@@ -114,7 +124,9 @@ func (c *Courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 	case <-c.BaseServer.Stop:
 		return nil, grpc.ErrServerStopped
 	case c.libriPutQueue <- docKey.String():
-		return &api.PutResponse{Operation: api.PutOperation_STORED}, nil
+		rp := &api.PutResponse{Operation: api.PutOperation_STORED}
+		c.Logger.Info("put document", putDocumentFields(rq, rp)...)
+		return rp, nil
 	default:
 		return nil, ErrFullLibriPutQueue
 	}
@@ -122,6 +134,7 @@ func (c *Courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 
 // Get retrieves a value from the Cache or libri network, if it exists.
 func (c *Courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse, error) {
+	c.Logger.Debug("received get request", zap.String(logKey, id.Hex(rq.Key)))
 	if err := api.ValidateGetRequest(rq); err != nil {
 		return nil, err
 	}
@@ -138,6 +151,7 @@ func (c *Courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse
 		if err = proto.Unmarshal(docBytes, doc); err != nil {
 			return nil, err
 		}
+		c.Logger.Info("returning value from cache", zap.String(logKey, id.Hex(rq.Key)))
 		return &api.GetResponse{Value: doc}, nil
 	}
 
@@ -154,6 +168,7 @@ func (c *Courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse
 	if err = c.cache.Put(docKey.String(), docBytes); err != nil {
 		return nil, err
 	}
+	c.Logger.Info("returning value from libri", zap.String(logKey, id.Hex(rq.Key)))
 	return &api.GetResponse{
 		Value: doc,
 	}, nil

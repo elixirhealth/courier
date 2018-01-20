@@ -1,6 +1,10 @@
 package cache
 
-import "time"
+import (
+	"time"
+
+	"go.uber.org/zap/zapcore"
+)
 
 // StorageType indicates how the Cache is stored.
 type StorageType int
@@ -95,4 +99,62 @@ type AccessRecord struct {
 	LibriPutOccurred     bool      `datastore:"libri_put_occurred"`
 	LibriPutTimeEarliest time.Time `datastore:"libri_put_time_earliest,noindex"`
 	CacheGetTimeLatest   time.Time `datastore:"cache_get_time_latest,noindex"`
+}
+
+func newCachePutAccessRecord() *AccessRecord {
+	now := time.Now()
+	return &AccessRecord{
+		CachePutDateEarliest: now.Unix() / secsPerDay,
+		CachePutTimeEarliest: now,
+		LibriPutOccurred:     false,
+	}
+}
+
+// MarshalLogObject marshals to the access record to the object encoder.
+func (r *AccessRecord) MarshalLogObject(oe zapcore.ObjectEncoder) error {
+	oe.AddInt64(logCachePutDateEarliest, r.CachePutDateEarliest)
+	oe.AddString(logCachePutDateEarliestISO,
+		time.Unix(r.CachePutDateEarliest*secsPerDay, 0).Format("2006-01-02"))
+	oe.AddTime(logCachePutTimeEarlist, r.CachePutTimeEarliest)
+	oe.AddBool(logLibriPutOccurred, r.LibriPutOccurred)
+	oe.AddTime(logLibriPutTimeEarliest, r.LibriPutTimeEarliest)
+	oe.AddTime(logCacheGetTimeLatest, r.CacheGetTimeLatest)
+	return nil
+}
+
+// keyGetTimes is a max-heap of keyGetTime objects sorted by getTime
+type keyGetTimes []keyGetTime
+
+type keyGetTime struct {
+	key     string
+	getTime time.Time
+}
+
+func (kgt keyGetTimes) Len() int {
+	return len(kgt)
+}
+
+func (kgt keyGetTimes) Less(i, j int) bool {
+	// After instead of Before turns min-heap into max-heap
+	return kgt[i].getTime.After(kgt[j].getTime)
+}
+
+func (kgt keyGetTimes) Swap(i, j int) {
+	kgt[i], kgt[j] = kgt[j], kgt[i]
+}
+
+func (kgt *keyGetTimes) Push(x interface{}) {
+	*kgt = append(*kgt, x.(keyGetTime))
+}
+
+func (kgt *keyGetTimes) Pop() interface{} {
+	old := *kgt
+	n := len(old)
+	x := old[n-1]
+	*kgt = old[0 : n-1]
+	return x
+}
+
+func (kgt keyGetTimes) Peak() keyGetTime {
+	return kgt[0]
 }

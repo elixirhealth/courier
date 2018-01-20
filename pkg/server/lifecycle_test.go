@@ -40,7 +40,7 @@ func TestCourier_startEvictor(t *testing.T) {
 	c.cache = testCache
 
 	go c.startEvictor()
-	time.Sleep(2 * c.config.Cache.EvictionPeriod)
+	time.Sleep(4 * c.config.Cache.EvictionPeriod)
 	close(c.BaseServer.Stop)
 
 	testCache.mu.Lock()
