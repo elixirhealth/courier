@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/drausin/libri/libri/common/errors"
-	"github.com/elxirhealth/courier/pkg/base/server"
 	"github.com/elxirhealth/courier/pkg/cache"
+	"github.com/elxirhealth/service-base/pkg/server"
 )
 
 const (

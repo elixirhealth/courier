@@ -8,8 +8,8 @@ import (
 
 	cerrors "github.com/drausin/libri/libri/common/errors"
 	libriapi "github.com/drausin/libri/libri/librarian/api"
-	"github.com/elxirhealth/courier/pkg/base/server"
 	api "github.com/elxirhealth/courier/pkg/courierapi"
+	"github.com/elxirhealth/service-base/pkg/server"
 	"github.com/golang/protobuf/proto"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
