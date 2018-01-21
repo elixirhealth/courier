@@ -11,7 +11,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/drausin/libri/libri/common/id"
-	"github.com/elxirhealth/courier/pkg/base/util"
+	"github.com/elxirhealth/service-base/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"google.golang.org/api/iterator"

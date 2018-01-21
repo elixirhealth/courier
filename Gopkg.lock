@@ -76,6 +76,12 @@
   revision = "bb3d318650d48840a39aa21a027c6630e198e626"
 
 [[projects]]
+  branch = "develop"
+  name = "github.com/elxirhealth/service-base"
+  packages = ["pkg/server"]
+  revision = "4f18bc0b929abb35ec4d8a28af254b470dacb9d0"
+
+[[projects]]
   name = "github.com/ethereum/go-ethereum"
   packages = [
     "common",
@@ -359,6 +365,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "863286d660534819a83415f0c49e8bff7a4005229c8f8cecf320888b69a58c8d"
+  inputs-digest = "0aff905ab637bdc6ec41b40b45daf5ebc78fd5b8d9b118562ef45bc38c33173e"
   solver-name = "gps-cdcl"
   solver-version = 1
