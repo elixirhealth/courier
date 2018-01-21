@@ -12,7 +12,7 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - v1-vendor-{{ arch }}-{{ checksum "Gopkg.lock" }}-rdb5.8
+            - arch={{ arch }}-vendor={{ checksum "Gopkg.lock" }}-rocksdb=5.8-v1
       - run: make get-deps
       - run:
           name: install RocksDB
@@ -26,9 +26,10 @@ jobs:
           name: install gorocksdb
           command: ./build/install-gorocksdb.sh
       - save_cache:
-          key: v1-vendor-{{ arch }}-{{ checksum "Gopkg.lock" }}-rdb5.8
+          key: arch={{ arch }}-vendor={{ checksum "Gopkg.lock" }}-rocksdb=5.8-v1
           paths:
             - vendor
+            - /usr/local/include/rocksdb
             - /usr/local/lib/librocksdb.a
       - run: make build
       - run: make test
