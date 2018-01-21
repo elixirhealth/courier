@@ -11,8 +11,8 @@
     "internal/fields",
     "internal/version"
   ]
-  revision = "050b16d2314d5fc3d4c9a51e4cd5c7468e77f162"
-  version = "v0.17.0"
+  revision = "767c40d6a2e058483c25fa193e963a22da17236d"
+  version = "v0.18.0"
 
 [[projects]]
   branch = "master"
@@ -256,7 +256,7 @@
     "jws",
     "jwt"
   ]
-  revision = "30785a2c434e431ef7c507b54617d6a951d5f2b4"
+  revision = "b28fcf2b08a19742b43084fb40ab78ac6c3d8067"
 
 [[projects]]
   branch = "master"
@@ -290,7 +290,7 @@
     "option",
     "transport/grpc"
   ]
-  revision = "8124d1ac69f14d76f852b3c28a59418989a4bdbe"
+  revision = "85dbeadc18ffa798f2716d8c48a2c1153470743a"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -353,8 +353,8 @@
     "tap",
     "transport"
   ]
-  revision = "7cea4cc846bcf00cbb27595b07da5de875ef7de9"
-  version = "v1.8.1"
+  revision = "6b51017f791ae1cfbec89c52efdf444b13b550ef"
+  version = "v1.9.2"
 
 [solve-meta]
   analyzer-name = "dep"
