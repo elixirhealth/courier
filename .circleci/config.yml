@@ -2,7 +2,10 @@ version: 2
 jobs:
   build:
     docker:
-      - image: daedalus2718/libri-build
+      - image: gcr.io/elxir-core-infra/service-base-build:latest
+        auth:
+          username: _json_key
+          password: $GCR_SVC_JSON
     parallelism: 1
     working_directory: /go/src/github.com/elxirhealth/courier
     steps:
