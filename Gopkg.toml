@@ -22,3 +22,7 @@
 [[constraint]]
   name = "github.com/drausin/libri"
   revision = "df1347893b506c2eb64935347cf7c7a6ca928e9d"
+
+[[override]]
+  name = "github.com/tecbot/gorocksdb"
+  revision = "57a309fefefb9c03d6dcc11a0e5705fc4711b46d"

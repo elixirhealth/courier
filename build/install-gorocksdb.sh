@@ -2,4 +2,4 @@
 
 CGO_CFLAGS="-I/usr/local/include/rocksdb" \
 CGO_LDFLAGS="-L/usr/local/lib/librocksdb.a -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy" \
-go get github.com/tecbot/gorocksdb
+go install github.com/elxirhealth/courier/vendor/github.com/tecbot/gorocksdb
