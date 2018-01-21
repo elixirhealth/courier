@@ -6,6 +6,7 @@ GIT_STATUS_SUBDIRS=$(shell git status --porcelain | grep -e '\.go$$' | sed -r 's
 GIT_DIFF_SUBDIRS=$(shell git diff develop..HEAD --name-only | grep -e '\.go$$' | sed -r 's|^(.+)/[^/]+\.go$$|\1|' | sort | uniq)
 GIT_STATUS_PKG_SUBDIRS=$(shell echo $(PKG_SUBDIRS) $(GIT_STATUS_SUBDIRS) | tr " " "\n" | sort | uniq -d)
 GIT_DIFF_PKG_SUBDIRS=$(shell echo $(PKG_SUBDIRS) $(GIT_DIFF_SUBDIRS) | tr " " "\n" | sort | uniq -d)
+SERVICE_BASE_PKG=github.com/elxirhealth/service-base
 
 .PHONY: bench build
 
@@ -31,16 +32,16 @@ get-deps:
 
 install-git-hooks:
 	@echo "--> Installing git-hooks"
-	@./scripts/install-git-hooks.sh
+	@vendor/$(SERVICE_BASE_PKG)/scripts/install-git-hooks.sh
 
 lint:
 	@echo "--> Running gometalinter"
-	@gometalinter $(PKG_SUBDIRS) --config=.gometalinter.json --deadline=5m
+	@gometalinter $(PKG_SUBDIRS) --config="vendor/$(SERVICE_BASE_PKG)/.gometalinter.json" --deadline=5m
 
 lint-diff:
 	@echo "--> Running gometalinter on packages with uncommitted changes"
 	@echo $(GIT_STATUS_PKG_SUBDIRS) | tr " " "\n"
-	@echo $(GIT_STATUS_PKG_SUBDIRS) | xargs gometalinter --config=.gometalinter.json --deadline=5m
+	@echo $(GIT_STATUS_PKG_SUBDIRS) | xargs gometalinter --config="vendor/$(SERVICE_BASE_PKG)/.gometalinter.json" --deadline=5m
 
 proto:
 	@echo "--> Running protoc"
