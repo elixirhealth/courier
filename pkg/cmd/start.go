@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+
 	cerrors "github.com/drausin/libri/libri/common/errors"
 	lserver "github.com/drausin/libri/libri/common/logging"
 	lserver2 "github.com/drausin/libri/libri/librarian/server"
@@ -13,7 +15,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
+const (
 	serverPortFlag             = "serverPort"
 	metricsPortFlag            = "metricsPort"
 	profilerPortFlag           = "profilerPort"
@@ -30,7 +32,9 @@ var (
 	cacheLRUSizeFlag           = "cacheLRUSize"
 	cacheEvictionBatchSizeFlag = "cacheEvictionBatchSize"
 	cacheEvictionPeriodFlag    = "cacheEvictionPeriod"
+)
 
+var (
 	errMultipleCacheStorageTypes = errors.New("multiple cache storage types specified")
 	errNoCacheStorateType        = errors.New("no cache storage type specified")
 )
@@ -39,6 +43,7 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "start a courier server",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		writeBanner(os.Stdout)
 		config, err := getCourierConfig()
 		if err != nil {
 			return err
@@ -48,7 +53,7 @@ var startCmd = &cobra.Command{
 }
 
 func init() {
-	courierCmd.AddCommand(startCmd)
+	rootCmd.AddCommand(startCmd)
 
 	startCmd.Flags().Uint(serverPortFlag, bserver.DefaultServerPort,
 		"port for the main service")

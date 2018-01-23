@@ -298,31 +298,31 @@ func TestGetNextEvictions(t *testing.T) {
 			},
 			// evictable & evicted in first batch
 			"key3": {
-				CachePutDateEarliest: now.Add(-36*time.Hour).Unix() / secsPerDay,
+				CachePutDateEarliest: now.Add(-50*time.Hour).Unix() / secsPerDay,
 				CacheGetTimeLatest:   now.Add(-6 * time.Second),
 				LibriPutOccurred:     true,
 			},
 			// evictable & evicted in first batch
 			"key4": {
-				CachePutDateEarliest: now.Add(-40*time.Hour).Unix() / secsPerDay,
+				CachePutDateEarliest: now.Add(-50*time.Hour).Unix() / secsPerDay,
 				CacheGetTimeLatest:   now.Add(-5 * time.Second),
 				LibriPutOccurred:     true,
 			},
 			// evictable & evicted in second batch
 			"key5": {
-				CachePutDateEarliest: now.Add(-36*time.Hour).Unix() / secsPerDay,
+				CachePutDateEarliest: now.Add(-50*time.Hour).Unix() / secsPerDay,
 				CacheGetTimeLatest:   now.Add(-4 * time.Second),
 				LibriPutOccurred:     true,
 			},
 			// evictable but not evicted b/c of LRU cache
 			"key6": {
-				CachePutDateEarliest: now.Add(-36*time.Hour).Unix() / secsPerDay,
+				CachePutDateEarliest: now.Add(-50*time.Hour).Unix() / secsPerDay,
 				CacheGetTimeLatest:   now.Add(-3 * time.Second),
 				LibriPutOccurred:     true,
 			},
 			// evictable but not evicted b/c of LRU cache
 			"key7": {
-				CachePutDateEarliest: now.Add(-36*time.Hour).Unix() / secsPerDay,
+				CachePutDateEarliest: now.Add(-50*time.Hour).Unix() / secsPerDay,
 				CacheGetTimeLatest:   now.Add(-2 * time.Second),
 				LibriPutOccurred:     true,
 			},
