@@ -89,7 +89,7 @@
     "pkg/util",
     "pkg/version"
   ]
-  revision = "a902ab97b08ec7828def4a1b14db0be4a60b7a0b"
+  revision = "622d816c43b377517c167801785a4c50ab68ef2a"
 
 [[projects]]
   name = "github.com/ethereum/go-ethereum"
@@ -124,7 +124,7 @@
     "ptypes/timestamp",
     "ptypes/wrappers"
   ]
-  revision = "1e59b77b52bf8e4b449a57e6f79f21226d571845"
+  revision = "c65a0412e71e8b9b3bfd22925720d23c0f054237"
 
 [[projects]]
   name = "github.com/googleapis/gax-go"
@@ -235,9 +235,11 @@
   name = "github.com/prometheus/procfs"
   packages = [
     ".",
+    "internal/util",
+    "nfsd",
     "xfs"
   ]
-  revision = "b15cd069a83443be3154b719d0cc9fe8117f09fb"
+  revision = "85fadb6e89903ef7cca6f6a804474cd5ea85b6e1"
 
 [[projects]]
   name = "github.com/spaolacci/murmur3"
@@ -397,7 +399,7 @@
     "option",
     "transport/grpc"
   ]
-  revision = "85dbeadc18ffa798f2716d8c48a2c1153470743a"
+  revision = "65b0d8655182691ad23b4fac11e6f7b897d9b634"
 
 [[projects]]
   name = "google.golang.org/appengine"

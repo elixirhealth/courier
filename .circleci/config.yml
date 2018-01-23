@@ -12,7 +12,8 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - arch={{ arch }}-vendor={{ checksum "Gopkg.lock" }}-rocksdb=5.8-v1
+            - arch={{ arch }}-rocksdb=5.8-vendor={{ checksum "Gopkg.lock" }}-v1
+            - arch={{ arch }}-rocksdb=5.8
       - run: make get-deps
       - run:
           name: install RocksDB
@@ -26,7 +27,7 @@ jobs:
           name: install gorocksdb
           command: ./build/install-gorocksdb.sh
       - save_cache:
-          key: arch={{ arch }}-vendor={{ checksum "Gopkg.lock" }}-rocksdb=5.8-v1
+          key: arch={{ arch }}-rocksdb=5.8-vendor={{ checksum "Gopkg.lock" }}-v1
           paths:
             - vendor
             - /usr/local/include/rocksdb
