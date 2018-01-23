@@ -279,7 +279,7 @@ func TestGetNextEvictions(t *testing.T) {
 	now := time.Now()
 	ar := &memoryAccessRecorder{
 		params: &Parameters{
-			RecentWindow:      10 * time.Minute,
+			RecentWindowDays:  1,
 			EvictionBatchSize: 2,
 			LRUCacheSize:      2,
 		},

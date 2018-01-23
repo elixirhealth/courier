@@ -3,11 +3,13 @@ package server
 import (
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/drausin/libri/libri/common/errors"
 	"github.com/elxirhealth/courier/pkg/cache"
 	"github.com/elxirhealth/service-base/pkg/server"
+	"go.uber.org/zap/zapcore"
 )
 
 const (
@@ -40,7 +42,7 @@ type Config struct {
 	ClientIDFilepath  string
 	GCPProjectID      string
 	Cache             *cache.Parameters
-	LibrarianAddrs    []*net.TCPAddr
+	Librarians        []*net.TCPAddr
 }
 
 // NewDefaultConfig create a new config instance with default values.
@@ -55,6 +57,32 @@ func NewDefaultConfig() *Config {
 		WithDefaultNLibriPutters().
 		WithDefaultCache().
 		WithDefaultLibrarianAddrs()
+}
+
+// MarshalLogObject writes the config to the given object encoder.
+func (c *Config) MarshalLogObject(oe zapcore.ObjectEncoder) error {
+	if err := c.Cache.MarshalLogObject(oe); err != nil {
+		return err
+	}
+	oe.AddDuration(logLibriGetTimeout, c.LibriGetTimeout)
+	oe.AddDuration(logLibriPutTimeout, c.LibriPutTimeout)
+	oe.AddUint(logLibriPutQueueSize, c.LibriPutQueueSize)
+	oe.AddUint(logNLibriPutters, c.NLibriPutters)
+	if c.ClientIDFilepath != "" {
+		oe.AddString(logClientIDFilepath, c.ClientIDFilepath)
+	}
+	if c.GCPProjectID != "" {
+		oe.AddString(logGCPProjectID, c.GCPProjectID)
+	}
+	if err := oe.AddObject(logCache, c.Cache); err != nil {
+		return err
+	}
+	las := make([]string, len(c.Librarians))
+	for i, la := range c.Librarians {
+		las[i] = la.String()
+	}
+	oe.AddString(logLibrarians, strings.Join(las, " "))
+	return nil
 }
 
 // WithLibriGetTimeout sets the libri Get request timeout to the given value or to the default
@@ -79,7 +107,7 @@ func (c *Config) WithLibriPutTimeout(t time.Duration) *Config {
 	if t == 0 {
 		return c.WithDefaultLibriPutTimeout()
 	}
-	c.LibriGetTimeout = t
+	c.LibriPutTimeout = t
 	return c
 }
 
@@ -154,7 +182,7 @@ func (c *Config) WithLibrarianAddrs(librarianAddrs []*net.TCPAddr) *Config {
 	if librarianAddrs == nil {
 		return c.WithDefaultLibrarianAddrs()
 	}
-	c.LibrarianAddrs = librarianAddrs
+	c.Librarians = librarianAddrs
 	return c
 }
 
@@ -164,6 +192,6 @@ func (c *Config) WithDefaultLibrarianAddrs() *Config {
 	addrStr := fmt.Sprintf("%s:%d", DefaultLibrarianHost, DefaultLibrarianPort)
 	addr, err := net.ResolveTCPAddr("tcp4", addrStr)
 	errors.MaybePanic(err) // should never happen
-	c.LibrarianAddrs = []*net.TCPAddr{addr}
+	c.Librarians = []*net.TCPAddr{addr}
 	return c
 }

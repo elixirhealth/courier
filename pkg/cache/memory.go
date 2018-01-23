@@ -139,7 +139,7 @@ func (r *memoryAccessRecorder) LibriPut(key string) error {
 func (r *memoryAccessRecorder) GetNextEvictions() ([]string, error) {
 	// not trying to be efficient, so just do full scan for docs satisfying eviction criteria
 	evict := &keyGetTimes{}
-	beforeDate := time.Now().Add(-r.params.RecentWindow).Unix() / secsPerDay
+	beforeDate := time.Now().Unix()/secsPerDay - int64(r.params.RecentWindowDays)
 	r.logger.Debug("finding evictable values", beforeDateFields(beforeDate)...)
 	r.mu.Lock()
 	nEvictable := 0

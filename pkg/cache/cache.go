@@ -6,9 +6,6 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// StorageType indicates how the Cache is stored.
-type StorageType int
-
 const (
 	// Unspecified indicates when the storage type is not specified (and thus should take the
 	// default value).
@@ -23,13 +20,38 @@ const (
 )
 
 const (
-	defaultStorage              = InMemory
-	defaultRecentWindow         = time.Hour * 24 * 7
-	defaultLRUCacheSize         = 1e4
-	defaultEvictionBatchSize    = uint(100)
-	defaultEvictionPeriod       = 30 * time.Minute
-	defaultEvictionQueryTimeout = 5 * time.Second
+	// DefaultStorage is the default storage type.
+	DefaultStorage = InMemory
+
+	// DefaultRecentWindowDays is the default number of days in the recent window.
+	DefaultRecentWindowDays = 7
+
+	// DefaultLRUCacheSize is the default size of the LRU cache.
+	DefaultLRUCacheSize = 1e4
+
+	// DefaultEvictionBatchSize is the default size of each eviction batch.
+	DefaultEvictionBatchSize = uint(100)
+
+	// DefaultEvictionPeriod is the default period of evictions.
+	DefaultEvictionPeriod = 30 * time.Minute
+
+	// DefaultEvictionQueryTimeout is the default timeout for eviction queries.
+	DefaultEvictionQueryTimeout = 5 * time.Second
 )
+
+// StorageType indicates how the Cache is stored.
+type StorageType int
+
+func (t StorageType) String() string {
+	switch t {
+	case InMemory:
+		return "InMemory"
+	case DataStore:
+		return "DataStore"
+	default:
+		return "Unspecified"
+	}
+}
 
 // Cache stores documents in a quasi-LRU cache. Implementations of this interface define how the
 // storage layer works.
@@ -72,22 +94,33 @@ type AccessRecorder interface {
 // Parameters defines the parameters used by the cache implementation.
 type Parameters struct {
 	StorageType          StorageType
-	RecentWindow         time.Duration
+	RecentWindowDays     int
 	LRUCacheSize         uint
 	EvictionBatchSize    uint
 	EvictionPeriod       time.Duration
 	EvictionQueryTimeout time.Duration
 }
 
+// MarshalLogObject writes the params to the given object encoder.
+func (p *Parameters) MarshalLogObject(oe zapcore.ObjectEncoder) error {
+	oe.AddString(logStorageType, p.StorageType.String())
+	oe.AddInt(logRecentWindowDays, p.RecentWindowDays)
+	oe.AddUint(logLRUCacheSize, p.LRUCacheSize)
+	oe.AddUint(logEvictionBatchSize, p.EvictionBatchSize)
+	oe.AddDuration(logEvictionPeriod, p.EvictionPeriod)
+	oe.AddDuration(logEvictionQueryTimeout, p.EvictionQueryTimeout)
+	return nil
+}
+
 // NewDefaultParameters returns a new instance of default cache parameter values.
 func NewDefaultParameters() *Parameters {
 	return &Parameters{
-		StorageType:          defaultStorage,
-		RecentWindow:         defaultRecentWindow,
-		LRUCacheSize:         defaultLRUCacheSize,
-		EvictionBatchSize:    defaultEvictionBatchSize,
-		EvictionPeriod:       defaultEvictionPeriod,
-		EvictionQueryTimeout: defaultEvictionQueryTimeout,
+		StorageType:          DefaultStorage,
+		RecentWindowDays:     DefaultRecentWindowDays,
+		LRUCacheSize:         DefaultLRUCacheSize,
+		EvictionBatchSize:    DefaultEvictionBatchSize,
+		EvictionPeriod:       DefaultEvictionPeriod,
+		EvictionQueryTimeout: DefaultEvictionQueryTimeout,
 	}
 }
 

@@ -210,7 +210,7 @@ func (r *datastoreAccessRecorder) CacheEvict(keys []string) error {
 
 // GetNextEvictions gets the next batch of keys for documents to evict.
 func (r *datastoreAccessRecorder) GetNextEvictions() ([]string, error) {
-	beforeDate := time.Now().Add(-r.params.RecentWindow).Unix() / secsPerDay
+	beforeDate := time.Now().Unix()/secsPerDay - int64(r.params.RecentWindowDays)
 
 	r.logger.Debug("finding evictable values", beforeDateFields(beforeDate)...)
 	evictable := datastore.NewQuery(accessRecordKind).
