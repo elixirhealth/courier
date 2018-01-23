@@ -20,11 +20,22 @@ const (
 )
 
 const (
-	DefaultStorage              = InMemory
-	DefaultRecentWindow         = time.Hour * 24 * 7
-	DefaultLRUCacheSize         = 1e4
-	DefaultEvictionBatchSize    = uint(100)
-	DefaultEvictionPeriod       = 30 * time.Minute
+	// DefaultStorage is the default storage type.
+	DefaultStorage = InMemory
+
+	// DefaultRecentWindowDays is the default number of days in the recent window.
+	DefaultRecentWindowDays = 7
+
+	// DefaultLRUCacheSize is the default size of the LRU cache.
+	DefaultLRUCacheSize = 1e4
+
+	// DefaultEvictionBatchSize is the default size of each eviction batch.
+	DefaultEvictionBatchSize = uint(100)
+
+	// DefaultEvictionPeriod is the default period of evictions.
+	DefaultEvictionPeriod = 30 * time.Minute
+
+	// DefaultEvictionQueryTimeout is the default timeout for eviction queries.
 	DefaultEvictionQueryTimeout = 5 * time.Second
 )
 
@@ -83,16 +94,17 @@ type AccessRecorder interface {
 // Parameters defines the parameters used by the cache implementation.
 type Parameters struct {
 	StorageType          StorageType
-	RecentWindow         time.Duration
+	RecentWindowDays     int
 	LRUCacheSize         uint
 	EvictionBatchSize    uint
 	EvictionPeriod       time.Duration
 	EvictionQueryTimeout time.Duration
 }
 
+// MarshalLogObject writes the params to the given object encoder.
 func (p *Parameters) MarshalLogObject(oe zapcore.ObjectEncoder) error {
 	oe.AddString(logStorageType, p.StorageType.String())
-	oe.AddDuration(logRecentWindow, p.RecentWindow)
+	oe.AddInt(logRecentWindowDays, p.RecentWindowDays)
 	oe.AddUint(logLRUCacheSize, p.LRUCacheSize)
 	oe.AddUint(logEvictionBatchSize, p.EvictionBatchSize)
 	oe.AddDuration(logEvictionPeriod, p.EvictionPeriod)
@@ -104,7 +116,7 @@ func (p *Parameters) MarshalLogObject(oe zapcore.ObjectEncoder) error {
 func NewDefaultParameters() *Parameters {
 	return &Parameters{
 		StorageType:          DefaultStorage,
-		RecentWindow:         DefaultRecentWindow,
+		RecentWindowDays:     DefaultRecentWindowDays,
 		LRUCacheSize:         DefaultLRUCacheSize,
 		EvictionBatchSize:    DefaultEvictionBatchSize,
 		EvictionPeriod:       DefaultEvictionPeriod,

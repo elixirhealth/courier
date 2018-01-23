@@ -238,7 +238,7 @@ func newCourierConfigs(librarianAddrs []*net.TCPAddr, params *parameters) (
 		LRUCacheSize:         4,
 		EvictionBatchSize:    4,
 		EvictionQueryTimeout: 5 * time.Second,
-		RecentWindow:         -24 * time.Hour, // i.e., everything is evictable
+		RecentWindowDays:     -24 * time.Hour, // i.e., everything is evictable
 		EvictionPeriod:       5 * time.Second,
 	}
 

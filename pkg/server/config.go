@@ -59,8 +59,11 @@ func NewDefaultConfig() *Config {
 		WithDefaultLibrarianAddrs()
 }
 
+// MarshalLogObject writes the config to the given object encoder.
 func (c *Config) MarshalLogObject(oe zapcore.ObjectEncoder) error {
-	// TODO (drausin) marshal base config
+	if err := c.Cache.MarshalLogObject(oe); err != nil {
+		return err
+	}
 	oe.AddDuration(logLibriGetTimeout, c.LibriGetTimeout)
 	oe.AddDuration(logLibriPutTimeout, c.LibriPutTimeout)
 	oe.AddUint(logLibriPutQueueSize, c.LibriPutQueueSize)
@@ -71,12 +74,14 @@ func (c *Config) MarshalLogObject(oe zapcore.ObjectEncoder) error {
 	if c.GCPProjectID != "" {
 		oe.AddString(logGCPProjectID, c.GCPProjectID)
 	}
-	oe.AddObject(logCache, c.Cache)
+	if err := oe.AddObject(logCache, c.Cache); err != nil {
+		return err
+	}
 	las := make([]string, len(c.Librarians))
 	for i, la := range c.Librarians {
 		las[i] = la.String()
 	}
-	oe.AddString(logLibrarians, strings.Join(las, ","))
+	oe.AddString(logLibrarians, strings.Join(las, " "))
 	return nil
 }
 
@@ -102,7 +107,7 @@ func (c *Config) WithLibriPutTimeout(t time.Duration) *Config {
 	if t == 0 {
 		return c.WithDefaultLibriPutTimeout()
 	}
-	c.LibriGetTimeout = t
+	c.LibriPutTimeout = t
 	return c
 }
 

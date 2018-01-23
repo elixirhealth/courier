@@ -26,7 +26,7 @@ const (
 	logNToEvict                = "n_to_evict"
 
 	logStorageType          = "storage_type"
-	logRecentWindow         = "recent_window"
+	logRecentWindowDays     = "recent_window_days"
 	logLRUCacheSize         = "lru_cache_size"
 	logEvictionBatchSize    = "eviction_batch_size"
 	logEvictionPeriod       = "eviction_period"

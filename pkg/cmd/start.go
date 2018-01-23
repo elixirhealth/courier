@@ -26,7 +26,7 @@ var (
 	librariansFlag             = "librarians"
 	cacheInMemoryStorageFlag   = "cacheInMemoryStorage"
 	cacheDataStoreStorageFlag  = "cacheDataStoreStorage"
-	cacheRecentWindowFlag      = "cacheRecentWindow"
+	cacheRecentWindowDaysFlag  = "cacheRecentWindowDays"
 	cacheLRUSizeFlag           = "cacheLRUSize"
 	cacheEvictionBatchSizeFlag = "cacheEvictionBatchSize"
 	cacheEvictionPeriodFlag    = "cacheEvictionPeriod"
@@ -73,7 +73,7 @@ func init() {
 		"cache uses in-memory storage")
 	startCmd.Flags().Bool(cacheDataStoreStorageFlag, false,
 		"cache uses GCP DataStore storage")
-	startCmd.Flags().Duration(cacheRecentWindowFlag, cache.DefaultRecentWindow,
+	startCmd.Flags().Int(cacheRecentWindowDaysFlag, cache.DefaultRecentWindowDays,
 		"recent past window in which cache entries are never evicted")
 	startCmd.Flags().Uint(cacheLRUSizeFlag, cache.DefaultLRUCacheSize,
 		"size of LRU cache before recent window")
@@ -100,7 +100,7 @@ func getCourierConfig() (*server.Config, error) {
 
 	cacheConfig := &cache.Parameters{
 		StorageType:       cacheStorage,
-		RecentWindow:      viper.GetDuration(cacheRecentWindowFlag),
+		RecentWindowDays:  viper.GetInt(cacheRecentWindowDaysFlag),
 		LRUCacheSize:      uint(viper.GetInt(cacheLRUSizeFlag)),
 		EvictionBatchSize: uint(viper.GetInt(cacheEvictionBatchSizeFlag)),
 		EvictionPeriod:    viper.GetDuration(cacheEvictionPeriodFlag),

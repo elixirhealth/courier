@@ -356,7 +356,7 @@ func TestDatastoreAccessRecorder_CacheEvict_err(t *testing.T) {
 func TestDatastoreAccessRecorder_GetNextEvictions_ok(t *testing.T) {
 	lg := zap.NewNop()
 	params := &Parameters{
-		RecentWindow:      24 * time.Hour,
+		RecentWindowDays:  1,
 		LRUCacheSize:      2,
 		EvictionBatchSize: 2,
 	}
@@ -409,7 +409,7 @@ func TestDatastoreAccessRecorder_GetNextEvictions_ok(t *testing.T) {
 func TestDatastoreAccessRecorder_GetNextEvictions_err(t *testing.T) {
 	lg := zap.NewNop()
 	params := &Parameters{
-		RecentWindow:      24 * time.Hour,
+		RecentWindowDays:  1,
 		LRUCacheSize:      2,
 		EvictionBatchSize: 3,
 	}
