@@ -14,7 +14,7 @@ func TestNewDefaultConfig(t *testing.T) {
 	assert.NotEmpty(t, c.LibriGetTimeout)
 	assert.NotEmpty(t, c.LibriPutTimeout)
 	assert.NotEmpty(t, c.LibriPutQueueSize)
-	assert.NotEmpty(t, c.LibrarianAddrs)
+	assert.NotEmpty(t, c.Librarians)
 	assert.NotEmpty(t, c.Cache)
 }
 
@@ -75,11 +75,11 @@ func TestConfig_WithCache(t *testing.T) {
 func TestConfig_WithBootstrapAddrs(t *testing.T) {
 	c1, c2, c3 := &Config{}, &Config{}, &Config{}
 	c1.WithDefaultLibrarianAddrs()
-	assert.Equal(t, c1.LibrarianAddrs, c2.WithLibrarianAddrs(nil).LibrarianAddrs)
+	assert.Equal(t, c1.Librarians, c2.WithLibrarianAddrs(nil).Librarians)
 	c3Addr, err := net.ResolveTCPAddr("tcp4", "localhost:1234")
 	assert.Nil(t, err)
 	assert.NotEqual(t,
-		c1.LibrarianAddrs,
-		c3.WithLibrarianAddrs([]*net.TCPAddr{c3Addr}).LibrarianAddrs,
+		c1.Librarians,
+		c3.WithLibrarianAddrs([]*net.TCPAddr{c3Addr}).Librarians,
 	)
 }

@@ -6,9 +6,6 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// StorageType indicates how the Cache is stored.
-type StorageType int
-
 const (
 	// Unspecified indicates when the storage type is not specified (and thus should take the
 	// default value).
@@ -23,13 +20,27 @@ const (
 )
 
 const (
-	defaultStorage              = InMemory
-	defaultRecentWindow         = time.Hour * 24 * 7
-	defaultLRUCacheSize         = 1e4
-	defaultEvictionBatchSize    = uint(100)
-	defaultEvictionPeriod       = 30 * time.Minute
-	defaultEvictionQueryTimeout = 5 * time.Second
+	DefaultStorage              = InMemory
+	DefaultRecentWindow         = time.Hour * 24 * 7
+	DefaultLRUCacheSize         = 1e4
+	DefaultEvictionBatchSize    = uint(100)
+	DefaultEvictionPeriod       = 30 * time.Minute
+	DefaultEvictionQueryTimeout = 5 * time.Second
 )
+
+// StorageType indicates how the Cache is stored.
+type StorageType int
+
+func (t StorageType) String() string {
+	switch t {
+	case InMemory:
+		return "InMemory"
+	case DataStore:
+		return "DataStore"
+	default:
+		return "Unspecified"
+	}
+}
 
 // Cache stores documents in a quasi-LRU cache. Implementations of this interface define how the
 // storage layer works.
@@ -79,15 +90,25 @@ type Parameters struct {
 	EvictionQueryTimeout time.Duration
 }
 
+func (p *Parameters) MarshalLogObject(oe zapcore.ObjectEncoder) error {
+	oe.AddString(logStorageType, p.StorageType.String())
+	oe.AddDuration(logRecentWindow, p.RecentWindow)
+	oe.AddUint(logLRUCacheSize, p.LRUCacheSize)
+	oe.AddUint(logEvictionBatchSize, p.EvictionBatchSize)
+	oe.AddDuration(logEvictionPeriod, p.EvictionPeriod)
+	oe.AddDuration(logEvictionQueryTimeout, p.EvictionQueryTimeout)
+	return nil
+}
+
 // NewDefaultParameters returns a new instance of default cache parameter values.
 func NewDefaultParameters() *Parameters {
 	return &Parameters{
-		StorageType:          defaultStorage,
-		RecentWindow:         defaultRecentWindow,
-		LRUCacheSize:         defaultLRUCacheSize,
-		EvictionBatchSize:    defaultEvictionBatchSize,
-		EvictionPeriod:       defaultEvictionPeriod,
-		EvictionQueryTimeout: defaultEvictionQueryTimeout,
+		StorageType:          DefaultStorage,
+		RecentWindow:         DefaultRecentWindow,
+		LRUCacheSize:         DefaultLRUCacheSize,
+		EvictionBatchSize:    DefaultEvictionBatchSize,
+		EvictionPeriod:       DefaultEvictionPeriod,
+		EvictionQueryTimeout: DefaultEvictionQueryTimeout,
 	}
 }
 

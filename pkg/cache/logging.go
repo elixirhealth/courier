@@ -22,10 +22,15 @@ const (
 	logBeforeDate              = "before_date"
 	logBeforeDateISO           = "before_date_iso"
 	logNEvictable              = "n_evictable"
-	logLRUCacheSize            = "lru_cache_size"
-	logEvictionBatchSize       = "eviction_batch_size"
 	logNEvicted                = "n_evicted"
 	logNToEvict                = "n_to_evict"
+
+	logStorageType          = "storage_type"
+	logRecentWindow         = "recent_window"
+	logLRUCacheSize         = "lru_cache_size"
+	logEvictionBatchSize    = "eviction_batch_size"
+	logEvictionPeriod       = "eviction_period"
+	logEvictionQueryTimeout = "eviction_query_timeout"
 )
 
 func nextEvictionsFields(nEvictable int, lruCacheSize uint) []zapcore.Field {
