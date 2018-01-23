@@ -21,6 +21,12 @@
   revision = "4c0e84591b9aa9e6dcfdf3e020114cd81f89d5f9"
 
 [[projects]]
+  name = "github.com/blang/semver"
+  packages = ["."]
+  revision = "2ee87856327ba09384cabd113bc6b5d174e9ec0f"
+  version = "v3.5.1"
+
+[[projects]]
   branch = "master"
   name = "github.com/btcsuite/btcd"
   packages = ["btcec"]
@@ -80,7 +86,8 @@
   name = "github.com/elxirhealth/service-base"
   packages = [
     "pkg/server",
-    "pkg/util"
+    "pkg/util",
+    "pkg/version"
   ]
   revision = "a902ab97b08ec7828def4a1b14db0be4a60b7a0b"
 
@@ -465,6 +472,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "ece1cde51d50740137b6d4be1d33c6d95b28822a6a48c7500b349f07df6d54c2"
+  inputs-digest = "0e4b8686cd25da7667b74b4ab7424d3406f45a2c638fe92e65c0e40e183339aa"
   solver-name = "gps-cdcl"
   solver-version = 1
