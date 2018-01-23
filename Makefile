@@ -25,7 +25,7 @@ build-static:
 
 docker-image:
 	@echo "--> Building docker image"
-	@docker build --rm=false -t gcr.io/elxir-core-infra/libri:snapshot deploy
+	@docker build --rm=false -t gcr.io/elxir-core-infra/courier:snapshot deploy
 
 fix:
 	@echo "--> Running goimports"
