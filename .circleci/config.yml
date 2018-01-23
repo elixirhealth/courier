@@ -35,3 +35,5 @@ jobs:
       - run: make test
       - run: make acceptance
       - run: make lint
+      - run: make build-static
+      - run: make docker-image
