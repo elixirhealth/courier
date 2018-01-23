@@ -19,6 +19,14 @@ build:
 	@echo "--> Running go build"
 	@go build $(PKGS)
 
+build-static:
+	@echo "--> Running go build for static binary"
+	@./vendor/$(SERVICE_BASE_PKG)/scripts/build-static deploy/bin/courier
+
+docker-image:
+	@echo "--> Building docker image"
+	@docker build --rm=false -t gcr.io/elxir-core-infra/courier:snapshot deploy
+
 fix:
 	@echo "--> Running goimports"
 	@find . -name *.go | grep -v /vendor/ | xargs goimports -l -w
