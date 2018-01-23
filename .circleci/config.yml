@@ -10,6 +10,7 @@ jobs:
     working_directory: /go/src/github.com/elxirhealth/courier
     steps:
       - checkout
+      - setup_remote_docker
       - restore_cache:
           keys:
             - arch={{ arch }}-rocksdb=5.8-vendor={{ checksum "Gopkg.lock" }}-v1
