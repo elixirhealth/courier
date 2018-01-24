@@ -57,16 +57,32 @@ librarian_addrs=${librarian_addrs::-1}  # remove trailing space
 sleep 5
 
 echo
-echo "testing librarians health..."
+echo "testing librarian health..."
 docker run --rm --net=courier ${LIBRI_IMAGE} test health \
     -a "${librarian_addrs}" \
     --logLevel "${LIBRI_LOG_LEVEL}" \
     --timeout "${LIBRI_TIMEOUT}"
 
 
-# start couriers
+echo
+echo "starting courier..."
+port=10100
+name="courier-${c}"
+docker run --name "${name}" --net=courier -d -p ${port}:${port} ${COURIER_IMAGE} \
+    start \
+    --logLevel "${LIBRI_LOG_LEVEL}" \
+    --serverPort ${port} \
+    --librarians ${librarian_addrs} \
+    --cacheInMemoryStorage
+courier_addrs="${name}:${port}"
+courier_containers="${name}"
 
-# test health
+
+echo
+echo "testing courier health..."
+docker run --rm --net=courier ${COURIER_IMAGE} test health \
+    -a "${courier_addrs}" \
+    --logLevel "${LIBRI_LOG_LEVEL}"
 
 # test io
 

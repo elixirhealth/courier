@@ -19,7 +19,6 @@ const (
 	serverPortFlag             = "serverPort"
 	metricsPortFlag            = "metricsPort"
 	profilerPortFlag           = "profilerPort"
-	logLevelFlag               = "logLevel"
 	profileFlag                = "profile"
 	libriTimeoutFlag           = "libriTimeout"
 	nLibrarianPuttersFlag      = "nLibrarianPutters"
@@ -61,8 +60,6 @@ func init() {
 		"port for Prometheus metrics")
 	startCmd.Flags().Uint(profilerPortFlag, bserver.DefaultProfilerPort,
 		"port for profiler endpoints (when enabled)")
-	startCmd.Flags().String(logLevelFlag, bserver.DefaultLogLevel.String(),
-		"log level")
 	startCmd.Flags().Bool(profileFlag, bserver.DefaultProfile,
 		"whether to enable profiler")
 	startCmd.Flags().Duration(libriTimeoutFlag, server.DefaultLibriGetTimeout,
@@ -73,7 +70,7 @@ func init() {
 		"size of the queue for document to Put into libri")
 	startCmd.Flags().String(gcpProjectIDFlag, "", "GCP project ID")
 	startCmd.Flags().StringSlice(librariansFlag, []string{},
-		"libri librarian addresses")
+		"space-separated libri librarian addresses")
 	startCmd.Flags().Bool(cacheInMemoryStorageFlag, true,
 		"cache uses in-memory storage")
 	startCmd.Flags().Bool(cacheDataStoreStorageFlag, false,
@@ -88,8 +85,8 @@ func init() {
 		"period between evictions")
 
 	// bind viper flags
-	viper.SetEnvPrefix("COURIER") // look for env vars with "COURIER_" prefix
-	viper.AutomaticEnv()          // read in environment variables that match
+	viper.SetEnvPrefix(envVarPrefix) // look for env vars with "COURIER_" prefix
+	viper.AutomaticEnv()             // read in environment variables that match
 	cerrors.MaybePanic(viper.BindPFlags(startCmd.Flags()))
 }
 
