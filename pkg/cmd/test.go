@@ -13,7 +13,6 @@ import (
 
 const (
 	couriersFlag = "couriers"
-	timeoutFlag  = "timeout"
 )
 
 var errFailedHealthcheck = errors.New("some or all couriers unhealthy")
