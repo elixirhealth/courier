@@ -92,8 +92,8 @@ func testIO() error {
 
 	for i := 0; i < nDocs; i++ {
 		key, err2 := api.GetKey(docs[i])
-		if err != nil {
-			return err
+		if err2 != nil {
+			return err2
 		}
 
 		c := courierClients[rng.Int31n(int32(len(courierClients)))]
@@ -102,7 +102,7 @@ func testIO() error {
 		rp, err2 := c.Get(ctx, rq)
 		cancel()
 		if err2 != nil {
-			logger.Error("document get failed", zap.Error(err))
+			logger.Error("document get failed", zap.Error(err2))
 			continue
 		}
 		if !reflect.DeepEqual(docs[i], rp.Value) {
