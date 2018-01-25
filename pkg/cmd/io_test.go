@@ -20,6 +20,8 @@ func TestTestIO(t *testing.T) {
 	config.Cache.StorageType = cache.InMemory
 	config.LibriPutQueueSize = nDocs * 2
 	config.LogLevel = zapcore.DebugLevel
+	config.ServerPort = 10200
+	config.MetricsPort = 10201
 
 	up := make(chan *server.Courier, 1)
 	wg1 := new(sync.WaitGroup)
