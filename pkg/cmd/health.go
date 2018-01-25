@@ -14,16 +14,14 @@ import (
 var healthCmd = &cobra.Command{
 	Use:   "health",
 	Short: "test health of one or more courier servers",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Run: func(cmd *cobra.Command, args []string) {
 		hc, err := getHealthChecker()
 		if err != nil {
-			log.Println(err.Error())
-			return err
+			log.Fatal(err)
 		}
 		if allOk, _ := hc.Check(); !allOk {
 			os.Exit(1)
 		}
-		return nil
 	},
 }
 

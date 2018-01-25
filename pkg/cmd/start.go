@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"log"
 	"os"
 
 	cerrors "github.com/drausin/libri/libri/common/errors"
@@ -41,13 +42,15 @@ var (
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "start a courier server",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Run: func(cmd *cobra.Command, args []string) {
 		writeBanner(os.Stdout)
 		config, err := getCourierConfig()
 		if err != nil {
-			return err
+			log.Fatal(err)
 		}
-		return server.Start(config, make(chan *server.Courier, 1))
+		if err = server.Start(config, make(chan *server.Courier, 1)); err != nil {
+			log.Fatal(err)
+		}
 	},
 }
 

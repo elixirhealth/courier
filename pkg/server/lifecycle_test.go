@@ -24,7 +24,6 @@ func TestStart(t *testing.T) {
 		assert.Nil(t, err)
 	}(wg1)
 
-	time.Sleep(100 * time.Millisecond)
 	c := <-up
 	assert.NotNil(t, c)
 

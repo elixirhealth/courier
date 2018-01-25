@@ -15,6 +15,7 @@ LIBRI_LOG_LEVEL="${LIBRI_LOG_LEVEL:-INFO}"  # or DEBUG
 LIBRI_TIMEOUT="${LIBRI_TIMEOUT:-5}"  # 10, or 20 for really sketchy network
 COURIER_LOG_LEVEL="${COURIER_LOG_LEVEL:-INFO}"  # or DEBUG
 COURIER_TIMEOUT="${COURIER_TIMEOUT:-5}"  # 10, or 20 for really sketchy network
+COURIER_TEST_IO_N_DOCS="${COURIER_TEST_IO_N_DOCS}:-8"
 
 # local and filesystem constants
 LOCAL_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -62,7 +63,6 @@ docker run --rm --net=courier ${LIBRI_IMAGE} test health \
     --logLevel "${LIBRI_LOG_LEVEL}" \
     --timeout "${LIBRI_TIMEOUT}"
 
-
 echo
 echo "starting courier..."
 port=10100
@@ -76,14 +76,19 @@ docker run --name "${name}" --net=courier -d -p ${port}:${port} ${COURIER_IMAGE}
 courier_addrs="${name}:${port}"
 courier_containers="${name}"
 
-
 echo
 echo "testing courier health..."
 docker run --rm --net=courier ${COURIER_IMAGE} test health \
-    -a "${courier_addrs}" \
+    --couriers "${courier_addrs}" \
     --logLevel "${LIBRI_LOG_LEVEL}"
 
-# test io
+echo
+echo "testing courier input/output..."
+docker run --rm --net=courier ${COURIER_IMAGE} test io \
+    --couriers "${courier_addrs}" \
+    --nDocs "${COURIER_TEST_IO_N_DOCS}" \
+    --logLevel "${COURIER_LOG_LEVEL}" \
+    --timeout "${COURIER_TIMEOUT}"
 
 echo
 echo "cleaning up..."

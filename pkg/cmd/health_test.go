@@ -14,7 +14,7 @@ func TestGetHealthChecker(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, hc)
 
-	couriers = ":1234"
+	couriers = "1234"
 	viper.Set(couriersFlag, couriers)
 	hc, err = getHealthChecker()
 	assert.NotNil(t, err)
