@@ -144,10 +144,7 @@ func (c *Courier) handleRunningErr(err error, errs chan error, logMsg string, ke
 	default:
 	}
 	if err != nil {
-		c.Logger.Error("error getting document from cache",
-			zap.String(logDocKey, key),
-			zap.Error(err),
-		)
+		c.Logger.Error(logMsg, zap.String(logDocKey, key), zap.Error(err))
 		return false
 	}
 	return true

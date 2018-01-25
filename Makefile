@@ -23,6 +23,10 @@ build-static:
 	@echo "--> Running go build for static binary"
 	@./vendor/$(SERVICE_BASE_PKG)/scripts/build-static deploy/bin/courier
 
+demo:
+	@echo "--> Running demo"
+	@./pkg/acceptance/local-demo.sh
+
 docker-image:
 	@echo "--> Building docker image"
 	@docker build --rm=false -t gcr.io/elxir-core-infra/courier:snapshot deploy
