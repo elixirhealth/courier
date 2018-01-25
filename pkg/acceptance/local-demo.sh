@@ -15,7 +15,7 @@ LIBRI_LOG_LEVEL="${LIBRI_LOG_LEVEL:-INFO}"  # or DEBUG
 LIBRI_TIMEOUT="${LIBRI_TIMEOUT:-5}"  # 10, or 20 for really sketchy network
 COURIER_LOG_LEVEL="${COURIER_LOG_LEVEL:-INFO}"  # or DEBUG
 COURIER_TIMEOUT="${COURIER_TIMEOUT:-5}"  # 10, or 20 for really sketchy network
-COURIER_TEST_IO_N_DOCS="${COURIER_TEST_IO_N_DOCS}:-8"
+COURIER_TEST_IO_N_DOCS="${COURIER_TEST_IO_N_DOCS:-8}"
 
 # local and filesystem constants
 LOCAL_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
