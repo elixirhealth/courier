@@ -30,7 +30,7 @@
   branch = "master"
   name = "github.com/btcsuite/btcd"
   packages = ["btcec"]
-  revision = "2e60448ffcc6bf78332d1fe590260095f554dd78"
+  revision = "50de9da05b50eb15658bb350f6ea24368a111ab7"
 
 [[projects]]
   name = "github.com/cenkalti/backoff"
@@ -73,7 +73,8 @@
     "libri/librarian/server/store",
     "libri/librarian/server/verify"
   ]
-  revision = "df1347893b506c2eb64935347cf7c7a6ca928e9d"
+  revision = "9a7143bdadcdd0c31f73a02b082e06221981e627"
+  version = "v0.3.0"
 
 [[projects]]
   branch = "master"
@@ -89,7 +90,7 @@
     "pkg/util",
     "pkg/version"
   ]
-  revision = "b1a2174f85b0df88f19fb92a5a58f35b2265192f"
+  revision = "f1252990a479f775fef9d090472a19aa9f435335"
 
 [[projects]]
   name = "github.com/ethereum/go-ethereum"
@@ -112,7 +113,6 @@
   version = "v1.4.7"
 
 [[projects]]
-  branch = "master"
   name = "github.com/golang/protobuf"
   packages = [
     "proto",
@@ -124,7 +124,8 @@
     "ptypes/timestamp",
     "ptypes/wrappers"
   ]
-  revision = "c65a0412e71e8b9b3bfd22925720d23c0f054237"
+  revision = "925541529c1fa6821df4e44ce2723319eb2be768"
+  version = "v1.0.0"
 
 [[projects]]
   name = "github.com/googleapis/gax-go"
@@ -145,7 +146,7 @@
     ".",
     "simplelru"
   ]
-  revision = "0a025b7e63adc15a622f29b0b2c4c3848243bbf6"
+  revision = "0fb14efe8c47ae851c0034ed7a448854d3d34cf3"
 
 [[projects]]
   branch = "master"
@@ -185,7 +186,7 @@
   branch = "master"
   name = "github.com/mitchellh/mapstructure"
   packages = ["."]
-  revision = "b4575eea38cca1123ec2dc90c26529b5c5acfcff"
+  revision = "a4e142e9c047c904fa2f1e144d9a84e6133024bc"
 
 [[projects]]
   name = "github.com/pelletier/go-toml"
@@ -236,10 +237,10 @@
   packages = [
     ".",
     "internal/util",
-    "nfsd",
+    "nfs",
     "xfs"
   ]
-  revision = "85fadb6e89903ef7cca6f6a804474cd5ea85b6e1"
+  revision = "cb4147076ac75738c9a7d279075a253c0cc5acbd"
 
 [[projects]]
   name = "github.com/spaolacci/murmur3"
@@ -289,8 +290,8 @@
 [[projects]]
   name = "github.com/stretchr/testify"
   packages = ["assert"]
-  revision = "b91bfb9ebec76498946beb6af7c0230c7cc7ba6c"
-  version = "v1.2.0"
+  revision = "12b6f73e6084dad08a7c6e575284b177ecafbc71"
+  version = "v1.2.1"
 
 [[projects]]
   name = "github.com/tecbot/gorocksdb"
@@ -347,7 +348,7 @@
     "lex/httplex",
     "trace"
   ]
-  revision = "5ccada7d0a7ba9aeb5d3aca8d3501b4c2a509fec"
+  revision = "2fb46b16b8dda405028c50f7c7f0f9dd1fa6bfb1"
 
 [[projects]]
   branch = "master"
@@ -359,13 +360,13 @@
     "jws",
     "jwt"
   ]
-  revision = "b28fcf2b08a19742b43084fb40ab78ac6c3d8067"
+  revision = "a032972e28060ca4f5644acffae3dfc268cc09db"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix"]
-  revision = "af50095a40f9041b3b38960738837185c26e9419"
+  revision = "37707fdb30a5b38865cfb95e5aab41707daec7fd"
 
 [[projects]]
   branch = "master"
@@ -399,7 +400,7 @@
     "option",
     "transport/grpc"
   ]
-  revision = "65b0d8655182691ad23b4fac11e6f7b897d9b634"
+  revision = "4c1b07210d562506ab52117997c3b7e294627ac9"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -429,7 +430,7 @@
     "googleapis/rpc/status",
     "googleapis/type/latlng"
   ]
-  revision = "a8101f21cf983e773d0c1133ebc5424792003214"
+  revision = "4eb30f4778eed4c258ba66527a0d4f9ec8a36c45"
 
 [[projects]]
   name = "google.golang.org/grpc"
@@ -474,6 +475,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "0e4b8686cd25da7667b74b4ab7424d3406f45a2c638fe92e65c0e40e183339aa"
+  inputs-digest = "284aa5a3352658234453c9654bad076a58017b1a5c96213ce8083190541b2689"
   solver-name = "gps-cdcl"
   solver-version = 1
