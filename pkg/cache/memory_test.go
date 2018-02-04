@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/drausin/libri/libri/common/id"
+	"github.com/drausin/libri/libri/common/logging"
 	"github.com/elxirhealth/service-base/pkg/util"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
