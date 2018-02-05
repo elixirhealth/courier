@@ -546,11 +546,11 @@ type fixedDatastoreClient struct {
 	runResult  *datastore.Iterator
 }
 
-func (f *fixedDatastoreClient) count(ctx context.Context, q *datastore.Query) (int, error) {
+func (f *fixedDatastoreClient) Count(ctx context.Context, q *datastore.Query) (int, error) {
 	return f.countValue, f.countErr
 }
 
-func (f *fixedDatastoreClient) put(key *datastore.Key, value interface{}) (*datastore.Key, error) {
+func (f *fixedDatastoreClient) Put(key *datastore.Key, value interface{}) (*datastore.Key, error) {
 	if f.putErr != nil {
 		return nil, f.putErr
 	}
@@ -558,7 +558,7 @@ func (f *fixedDatastoreClient) put(key *datastore.Key, value interface{}) (*data
 	return key, nil
 }
 
-func (f *fixedDatastoreClient) get(key *datastore.Key, dest interface{}) error {
+func (f *fixedDatastoreClient) Get(key *datastore.Key, dest interface{}) error {
 	if f.getErr != nil {
 		return f.getErr
 	}
@@ -578,13 +578,13 @@ func (f *fixedDatastoreClient) get(key *datastore.Key, dest interface{}) error {
 	return nil
 }
 
-func (f *fixedDatastoreClient) delete(keys []*datastore.Key) error {
+func (f *fixedDatastoreClient) Delete(keys []*datastore.Key) error {
 	f.value = nil
 	f.deleteKeys = keys
 	return f.deleteErr
 }
 
-func (f *fixedDatastoreClient) run(ctx context.Context, q *datastore.Query) *datastore.Iterator {
+func (f *fixedDatastoreClient) Run(ctx context.Context, q *datastore.Query) *datastore.Iterator {
 	return f.runResult
 }
 
