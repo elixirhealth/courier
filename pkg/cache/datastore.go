@@ -9,6 +9,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/drausin/libri/libri/common/id"
+	"github.com/elxirhealth/service-base/pkg/server/storage"
 	"go.uber.org/zap"
 	"google.golang.org/api/iterator"
 )
@@ -49,7 +50,7 @@ type MarshaledDocument struct {
 }
 
 type datastoreCache struct {
-	client         datastoreClient
+	client         storage.DatastoreClient
 	accessRecorder AccessRecorder
 	logger         *zap.Logger
 }
@@ -65,7 +66,7 @@ func NewDatastore(
 	if err != nil {
 		return nil, nil, err
 	}
-	wrappedClient := &datastoreClientImpl{client}
+	wrappedClient := &storage.DatastoreClientImpl{Inner: client}
 	ar := &datastoreAccessRecorder{
 		client: wrappedClient,
 		iter:   &datastoreIteratorImpl{},
@@ -88,7 +89,7 @@ func (c *datastoreCache) Put(key string, value []byte) error {
 	}
 	dsKey := datastore.NameKey(documentKind, key, nil)
 	existingValue := &MarshaledDocument{}
-	err := c.client.get(dsKey, existingValue)
+	err := c.client.Get(dsKey, existingValue)
 	if err != nil && err != datastore.ErrNoSuchEntity {
 		return err
 	}
@@ -104,7 +105,7 @@ func (c *datastoreCache) Put(key string, value []byte) error {
 	if err != nil {
 		return err
 	}
-	if _, err = c.client.put(dsKey, docValue); err != nil {
+	if _, err = c.client.Put(dsKey, docValue); err != nil {
 		return err
 	}
 	if err = c.accessRecorder.CachePut(key); err != nil {
@@ -120,7 +121,7 @@ func (c *datastoreCache) Get(key string) ([]byte, error) {
 	logger.Debug("getting from cache")
 	cacheKey := datastore.NameKey(documentKind, key, nil)
 	existingCacheValue := &MarshaledDocument{}
-	if err := c.client.get(cacheKey, existingCacheValue); err != nil {
+	if err := c.client.Get(cacheKey, existingCacheValue); err != nil {
 		if err == datastore.ErrNoSuchEntity {
 			logger.Debug("cache does not have value")
 			return nil, ErrMissingValue
@@ -152,7 +153,7 @@ func (c *datastoreCache) EvictNext() error {
 	if err = c.accessRecorder.Evict(keyNames); err != nil {
 		return err
 	}
-	if err = c.client.delete(dsKeys); err != nil {
+	if err = c.client.Delete(dsKeys); err != nil {
 		return err
 	}
 	c.logger.Info("evicted documents", zap.Int(logNEvicted, len(dsKeys)))
@@ -160,7 +161,7 @@ func (c *datastoreCache) EvictNext() error {
 }
 
 type datastoreAccessRecorder struct {
-	client datastoreClient
+	client storage.DatastoreClient
 	iter   datastoreIterator
 	params *Parameters
 	logger *zap.Logger
@@ -170,14 +171,14 @@ type datastoreAccessRecorder struct {
 // key.
 func (r *datastoreAccessRecorder) CachePut(key string) error {
 	dsKey := datastore.NameKey(accessRecordKind, key, nil)
-	err := r.client.get(dsKey, &AccessRecord{})
+	err := r.client.Get(dsKey, &AccessRecord{})
 	if err != datastore.ErrNoSuchEntity {
 		// either real error or get worked fine (and err is nil), so record already exists;
 		// in both cases, we just want to return the err
 		return err
 	}
 	value := newCachePutAccessRecord()
-	_, err = r.client.put(dsKey, value)
+	_, err = r.client.Put(dsKey, value)
 	r.logger.Debug("put new access record", accessRecordFields(key, value)...)
 	return err
 }
@@ -201,7 +202,7 @@ func (r *datastoreAccessRecorder) CacheEvict(keys []string) error {
 	for i, key := range keys {
 		dsKeys[i] = datastore.NameKey(accessRecordKind, key, nil)
 	}
-	if err := r.client.delete(dsKeys); err != nil {
+	if err := r.client.Delete(dsKeys); err != nil {
 		return err
 	}
 	r.logger.Debug("evicted access records", zap.Int(logNValues, len(keys)))
@@ -218,7 +219,7 @@ func (r *datastoreAccessRecorder) GetNextEvictions() ([]string, error) {
 		Filter("libri_put_occurred = ", true)
 
 	ctx, cancel := context.WithTimeout(context.Background(), r.params.EvictionQueryTimeout)
-	nEvictable, err := r.client.count(ctx, evictable)
+	nEvictable, err := r.client.Count(ctx, evictable)
 	cancel()
 	if err != nil {
 		return nil, err
@@ -238,7 +239,7 @@ func (r *datastoreAccessRecorder) GetNextEvictions() ([]string, error) {
 
 	// get keys of nToEvict docs gotten least recently
 	ctx, cancel = context.WithTimeout(context.Background(), r.params.EvictionQueryTimeout)
-	r.iter.Init(r.client.run(ctx, evictable))
+	r.iter.Init(r.client.Run(ctx, evictable))
 	evict := &keyGetTimes{}
 	var key *datastore.Key
 	for {
@@ -271,7 +272,7 @@ func (r *datastoreAccessRecorder) Evict(keys []string) error {
 	for i, keyName := range keys {
 		dsKeys[i] = datastore.NameKey(accessRecordKind, keyName, nil)
 	}
-	if err := r.client.delete(dsKeys); err != nil {
+	if err := r.client.Delete(dsKeys); err != nil {
 		return err
 	}
 	r.logger.Debug("evicted access records", zap.Int(logNEvicted, len(dsKeys)))
@@ -281,12 +282,12 @@ func (r *datastoreAccessRecorder) Evict(keys []string) error {
 func (r *datastoreAccessRecorder) update(key string, update *AccessRecord) error {
 	dsKey := datastore.NameKey(accessRecordKind, key, nil)
 	existing := &AccessRecord{}
-	if err := r.client.get(dsKey, existing); err != nil {
+	if err := r.client.Get(dsKey, existing); err != nil {
 		return err
 	}
 	updated := *existing
 	updateAccessRecord(&updated, update)
-	if _, err := r.client.put(dsKey, &updated); err != nil {
+	if _, err := r.client.Put(dsKey, &updated); err != nil {
 		return err
 	}
 	r.logger.Debug("updated access record",
@@ -304,38 +305,6 @@ func updateAccessRecord(existing, update *AccessRecord) {
 	if update.LibriPutOccurred {
 		existing.LibriPutOccurred = update.LibriPutOccurred
 	}
-}
-
-type datastoreClient interface {
-	put(key *datastore.Key, value interface{}) (*datastore.Key, error)
-	get(key *datastore.Key, dest interface{}) error
-	delete(keys []*datastore.Key) error
-	count(ctx context.Context, q *datastore.Query) (int, error)
-	run(ctx context.Context, q *datastore.Query) *datastore.Iterator
-}
-
-type datastoreClientImpl struct {
-	inner *datastore.Client
-}
-
-func (c *datastoreClientImpl) get(key *datastore.Key, dest interface{}) error {
-	return c.inner.Get(context.Background(), key, dest)
-}
-
-func (c *datastoreClientImpl) put(key *datastore.Key, value interface{}) (*datastore.Key, error) {
-	return c.inner.Put(context.Background(), key, value)
-}
-
-func (c *datastoreClientImpl) delete(keys []*datastore.Key) error {
-	return c.inner.DeleteMulti(context.Background(), keys)
-}
-
-func (c *datastoreClientImpl) count(ctx context.Context, q *datastore.Query) (int, error) {
-	return c.inner.Count(ctx, q)
-}
-
-func (c *datastoreClientImpl) run(ctx context.Context, q *datastore.Query) *datastore.Iterator {
-	return c.inner.Run(ctx, q)
 }
 
 type datastoreIterator interface {

@@ -6,7 +6,7 @@ import (
 
 	cerrors "github.com/drausin/libri/libri/common/errors"
 	lserver "github.com/drausin/libri/libri/common/logging"
-	lserver2 "github.com/drausin/libri/libri/librarian/server"
+	"github.com/drausin/libri/libri/common/parse"
 	"github.com/elxirhealth/courier/pkg/cache"
 	"github.com/elxirhealth/courier/pkg/server"
 	bserver "github.com/elxirhealth/service-base/pkg/server"
@@ -94,7 +94,7 @@ func init() {
 }
 
 func getCourierConfig() (*server.Config, error) {
-	librarianAddrs, err := lserver2.ParseAddrs(viper.GetStringSlice(librariansFlag))
+	librarianAddrs, err := parse.Addrs(viper.GetStringSlice(librariansFlag))
 	if err != nil {
 		return nil, err
 	}

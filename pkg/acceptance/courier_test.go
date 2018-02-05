@@ -17,6 +17,7 @@ import (
 
 	"github.com/drausin/libri/libri/common/errors"
 	logging "github.com/drausin/libri/libri/common/logging"
+	"github.com/drausin/libri/libri/common/parse"
 	"github.com/drausin/libri/libri/librarian/api"
 	lserver "github.com/drausin/libri/libri/librarian/server"
 	"github.com/elxirhealth/courier/pkg/cache"
@@ -169,7 +170,7 @@ func newLibrarianConfigs(dataDir string, nPeers int, logLevel zapcore.Level) (
 }
 
 func newLibrarianConfig(dataDir string, port int, logLevel zapcore.Level) *lserver.Config {
-	localAddr, err := lserver.ParseAddr("localhost", port)
+	localAddr, err := parse.Addr("localhost", port)
 	errors.MaybePanic(err) // should never happen
 	peerDataDir := filepath.Join(dataDir, lserver.NameFromAddr(localAddr))
 

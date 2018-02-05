@@ -51,6 +51,7 @@
   version = "v3.1.0"
 
 [[projects]]
+  branch = "develop"
   name = "github.com/drausin/libri"
   packages = [
     "libri/author/io/publish",
@@ -59,6 +60,7 @@
     "libri/common/errors",
     "libri/common/id",
     "libri/common/logging",
+    "libri/common/parse",
     "libri/common/storage",
     "libri/common/subscribe",
     "libri/librarian/api",
@@ -73,8 +75,7 @@
     "libri/librarian/server/store",
     "libri/librarian/server/verify"
   ]
-  revision = "9a7143bdadcdd0c31f73a02b082e06221981e627"
-  version = "v0.3.0"
+  revision = "31154ff4fb337cd9819dc42e915ebfdf04f9888d"
 
 [[projects]]
   branch = "master"
@@ -87,10 +88,11 @@
   name = "github.com/elxirhealth/service-base"
   packages = [
     "pkg/server",
+    "pkg/server/storage",
     "pkg/util",
     "pkg/version"
   ]
-  revision = "f1252990a479f775fef9d090472a19aa9f435335"
+  revision = "b702a22f7a04ec98316fcdd8ad530ac73cdcec35"
 
 [[projects]]
   name = "github.com/ethereum/go-ethereum"
@@ -475,6 +477,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "284aa5a3352658234453c9654bad076a58017b1a5c96213ce8083190541b2689"
+  inputs-digest = "e800802e81e26cffb90e3122a89348f0842819d38568fc81895f91bfdd370a67"
   solver-name = "gps-cdcl"
   solver-version = 1
