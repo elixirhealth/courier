@@ -5,7 +5,7 @@ import (
 	"os"
 
 	lserver "github.com/drausin/libri/libri/common/logging"
-	server2 "github.com/drausin/libri/libri/librarian/server"
+	"github.com/drausin/libri/libri/common/parse"
 	"github.com/elxirhealth/service-base/pkg/server"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -30,7 +30,7 @@ func init() {
 }
 
 func getHealthChecker() (server.HealthChecker, error) {
-	addrs, err := server2.ParseAddrs(viper.GetStringSlice(couriersFlag))
+	addrs, err := parse.Addrs(viper.GetStringSlice(couriersFlag))
 	if err != nil {
 		return nil, err
 	}

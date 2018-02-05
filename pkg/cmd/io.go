@@ -9,8 +9,8 @@ import (
 
 	cerrors "github.com/drausin/libri/libri/common/errors"
 	lserver "github.com/drausin/libri/libri/common/logging"
+	"github.com/drausin/libri/libri/common/parse"
 	"github.com/drausin/libri/libri/librarian/api"
-	"github.com/drausin/libri/libri/librarian/server"
 	"github.com/elxirhealth/courier/pkg/courierapi"
 	server2 "github.com/elxirhealth/service-base/pkg/server"
 	"github.com/pkg/errors"
@@ -53,7 +53,7 @@ func init() {
 func testIO() error {
 	rng := rand.New(rand.NewSource(0))
 	logger := lserver.NewDevLogger(lserver.GetLogLevel(viper.GetString(logLevelFlag)))
-	addrs, err := server.ParseAddrs(viper.GetStringSlice(couriersFlag))
+	addrs, err := parse.Addrs(viper.GetStringSlice(couriersFlag))
 	if err != nil {
 		return err
 	}
