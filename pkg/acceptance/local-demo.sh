@@ -66,13 +66,13 @@ docker run --rm --net=courier ${LIBRI_IMAGE} test health \
 echo
 echo "starting courier..."
 port=10100
-name="courier-${c}"
+name="courier-0"
 docker run --name "${name}" --net=courier -d -p ${port}:${port} ${COURIER_IMAGE} \
     start \
     --logLevel "${LIBRI_LOG_LEVEL}" \
     --serverPort ${port} \
     --librarians ${librarian_addrs} \
-    --cacheInMemoryStorage
+    --cacheMemoryStorage
 courier_addrs="${name}:${port}"
 courier_containers="${name}"
 
