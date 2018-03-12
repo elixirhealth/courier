@@ -228,14 +228,12 @@ func newCourierConfigs(librarianAddrs []*net.TCPAddr, params *parameters) (
 
 	// set eviction params to ensure that evictions actually happen during test
 	cacheParams := cache.NewDefaultParameters()
-
 	cacheParams.Type = bstorage.DataStore
 	cacheParams.LRUCacheSize = 4
 	cacheParams.EvictionBatchSize = 4
 	cacheParams.EvictionQueryTimeout = 5 * time.Second
 	cacheParams.RecentWindowDays = -1 // i.e., everything is evictable
 	cacheParams.EvictionPeriod = 5 * time.Second
-	cacheParams.DeleteTimeout = 1 * time.Second
 
 	for i := 0; i < params.nCouriers; i++ {
 		serverPort, metricsPort := startPort+i*10, startPort+i*10+1
