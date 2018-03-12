@@ -16,25 +16,18 @@ import (
 	"time"
 
 	"github.com/drausin/libri/libri/common/errors"
-	logging "github.com/drausin/libri/libri/common/logging"
+	"github.com/drausin/libri/libri/common/logging"
 	"github.com/drausin/libri/libri/common/parse"
 	"github.com/drausin/libri/libri/librarian/api"
 	lserver "github.com/drausin/libri/libri/librarian/server"
 	"github.com/elxirhealth/courier/pkg/cache"
 	"github.com/elxirhealth/courier/pkg/courierapi"
 	cserver "github.com/elxirhealth/courier/pkg/server"
+	bstorage "github.com/elxirhealth/service-base/pkg/server/storage"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 )
-
-// test
-// - start librarians
-// - start 3 couriers
-//	- change eviction params so evictions will actually happen
-// - put/get a bunch of documents
-// - stop couriers
-// - stop librarians
 
 const (
 	datastoreEmulatorHostEnv = "DATASTORE_EMULATOR_HOST"
@@ -234,14 +227,15 @@ func newCourierConfigs(librarianAddrs []*net.TCPAddr, params *parameters) (
 	addrs := make([]*net.TCPAddr, params.nCouriers)
 
 	// set eviction params to ensure that evictions actually happen during test
-	cacheParams := &cache.Parameters{
-		Type:                 cache.DataStore,
-		LRUCacheSize:         4,
-		EvictionBatchSize:    4,
-		EvictionQueryTimeout: 5 * time.Second,
-		RecentWindowDays:     -1, // i.e., everything is evictable
-		EvictionPeriod:       5 * time.Second,
-	}
+	cacheParams := cache.NewDefaultParameters()
+
+	cacheParams.Type = bstorage.DataStore
+	cacheParams.LRUCacheSize = 4
+	cacheParams.EvictionBatchSize = 4
+	cacheParams.EvictionQueryTimeout = 5 * time.Second
+	cacheParams.RecentWindowDays = -1 // i.e., everything is evictable
+	cacheParams.EvictionPeriod = 5 * time.Second
+	cacheParams.DeleteTimeout = 1 * time.Second
 
 	for i := 0; i < params.nCouriers; i++ {
 		serverPort, metricsPort := startPort+i*10, startPort+i*10+1
