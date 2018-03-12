@@ -24,10 +24,10 @@ func TestNewCourier_ok(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, c.clientID)
 	assert.NotNil(t, c.cache)
-	assert.NotNil(t, c.getter)
-	assert.NotNil(t, c.putter)
-	assert.NotNil(t, c.acquirer)
-	assert.NotNil(t, c.publisher)
+	assert.NotNil(t, c.libriGetter)
+	assert.NotNil(t, c.libriPutter)
+	assert.NotNil(t, c.libriAcquirer)
+	assert.NotNil(t, c.libriPublisher)
 	assert.NotNil(t, c.libriPutQueue)
 	assert.Equal(t, config, c.config)
 }
@@ -176,9 +176,9 @@ func TestCourier_Get_ok(t *testing.T) {
 	cc = &fixedCache{getErr: cache.ErrMissingValue}
 	acq := &fixedAcquirer{doc: value}
 	c = &Courier{
-		BaseServer: server.NewBaseServer(server.NewDefaultBaseConfig()),
-		cache:      cc,
-		acquirer:   acq,
+		BaseServer:    server.NewBaseServer(server.NewDefaultBaseConfig()),
+		cache:         cc,
+		libriAcquirer: acq,
 	}
 	rp, err = c.Get(context.Background(), rq)
 	assert.Nil(t, err)
@@ -216,18 +216,18 @@ func TestCourier_Get_err(t *testing.T) {
 				cache: &fixedCache{value: []byte{1, 2, 3, 4}},
 			},
 		},
-		"acquirer Acquire error": {
+		"libriAcquirer Acquire error": {
 			rq: okRq,
 			c: &Courier{
-				cache:    &fixedCache{getErr: cache.ErrMissingValue},
-				acquirer: &fixedAcquirer{err: errors.New("some Acquire error")},
+				cache:         &fixedCache{getErr: cache.ErrMissingValue},
+				libriAcquirer: &fixedAcquirer{err: errors.New("some Acquire error")},
 			},
 		},
-		"acquirer Acquire missing doc": {
+		"libriAcquirer Acquire missing doc": {
 			rq: okRq,
 			c: &Courier{
-				cache:    &fixedCache{getErr: cache.ErrMissingValue},
-				acquirer: &fixedAcquirer{err: libriapi.ErrMissingDocument},
+				cache:         &fixedCache{getErr: cache.ErrMissingValue},
+				libriAcquirer: &fixedAcquirer{err: libriapi.ErrMissingDocument},
 			},
 		},
 		"Cache Put error": {
@@ -237,7 +237,7 @@ func TestCourier_Get_err(t *testing.T) {
 					getErr: cache.ErrMissingValue,
 					putErr: errors.New("some Put error"),
 				},
-				acquirer: &fixedAcquirer{doc: value},
+				libriAcquirer: &fixedAcquirer{doc: value},
 			},
 		},
 	}

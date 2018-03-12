@@ -45,7 +45,7 @@ func init() {
 		"timeout (secs) of courier requests")
 
 	// bind viper flags
-	viper.SetEnvPrefix(envVarPrefix) // look for env vars with "LIBRI_" prefix
+	viper.SetEnvPrefix(envVarPrefix) // look for env vars with prefix
 	viper.AutomaticEnv()             // read in environment variables that match
 	cerrors.MaybePanic(viper.BindPFlags(ioCmd.Flags()))
 }

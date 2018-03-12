@@ -37,7 +37,7 @@ const (
 
 var (
 	errMultipleCacheStorageTypes = errors.New("multiple cache storage types specified")
-	errNoCacheStorateType        = errors.New("no cache storage type specified")
+	errNoCacheStorageType        = errors.New("no cache storage type specified")
 )
 
 var startCmd = &cobra.Command{
@@ -142,5 +142,5 @@ func getCacheStorageType() (bstorage.Type, error) {
 	if viper.GetBool(cacheDataStoreStorageFlag) {
 		return bstorage.DataStore, nil
 	}
-	return bstorage.Unspecified, errNoCacheStorateType
+	return bstorage.Unspecified, errNoCacheStorageType
 }

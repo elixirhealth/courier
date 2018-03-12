@@ -49,6 +49,8 @@ func TestConfig_WithNLibriPutters(t *testing.T) {
 	assert.NotEqual(t, c1.NLibriPutters, c3.WithNLibriPutters(2).NLibriPutters)
 }
 
+// TODO (drausin) add more config tests for catalog stuff
+
 func TestConfig_WithClientIDFilepath(t *testing.T) {
 	c1 := &Config{}
 	fp := "test filepath"
@@ -73,14 +75,9 @@ func TestConfig_WithCache(t *testing.T) {
 	)
 }
 
-func TestConfig_WithBootstrapAddrs(t *testing.T) {
-	c1, c2, c3 := &Config{}, &Config{}, &Config{}
-	c1.WithDefaultLibrarianAddrs()
-	assert.Equal(t, c1.Librarians, c2.WithLibrarianAddrs(nil).Librarians)
-	c3Addr, err := net.ResolveTCPAddr("tcp4", "localhost:1234")
+func TestConfig_WithLibrarianAddrs(t *testing.T) {
+	c := &Config{}
+	addr, err := net.ResolveTCPAddr("tcp4", "localhost:1234")
 	assert.Nil(t, err)
-	assert.NotEqual(t,
-		c1.Librarians,
-		c3.WithLibrarianAddrs([]*net.TCPAddr{c3Addr}).Librarians,
-	)
+	assert.Equal(t, 1, len(c.WithLibrarianAddrs([]*net.TCPAddr{addr}).Librarians))
 }

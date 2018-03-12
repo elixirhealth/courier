@@ -61,7 +61,7 @@ func TestCourier_startLibriPutter_ok(t *testing.T) {
 	testAccessRecorder := &fixedAccessRecorder{}
 	c.accessRecorder = testAccessRecorder
 	testPub := &fixedPublisher{}
-	c.publisher = testPub
+	c.libriPublisher = testPub
 	c.libriPutQueue <- key.String()
 	go c.Serve(func(s *grpc.Server) {}, func() {})
 	c.WaitUntilStarted()
@@ -70,7 +70,7 @@ func TestCourier_startLibriPutter_ok(t *testing.T) {
 	wg1.Add(1)
 	go func(wg2 *sync.WaitGroup) {
 		defer wg2.Done()
-		c.startLibriPutter()
+		c.startLibriPutters()
 	}(wg1)
 	time.Sleep(25 * time.Millisecond)
 	c.StopServer()
@@ -94,26 +94,26 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	c.cache = &fixedCache{
 		getErr: errors.New("some cache Get error"),
 	}
-	c.publisher = testPub
+	c.libriPublisher = testPub
 	for i := 0; i < libriPutterErrQueueSize; i++ {
 		c.libriPutQueue <- key.String()
 	}
 	go c.Serve(func(s *grpc.Server) {}, func() {})
 	c.WaitUntilStarted()
-	c.startLibriPutter()
+	c.startLibriPutters()
 	assert.Equal(t, uint(0), testPub.nPubs)
 
 	// check fatal unmarshal error
 	c, err = newCourier(cc)
 	assert.Nil(t, err)
 	c.cache = &fixedCache{value: []byte{1, 2, 3, 4}}
-	c.publisher = &fixedPublisher{}
+	c.libriPublisher = &fixedPublisher{}
 	for i := 0; i < libriPutterErrQueueSize; i++ {
 		c.libriPutQueue <- "some key"
 	}
 	go c.Serve(func(s *grpc.Server) {}, func() {})
 	c.WaitUntilStarted()
-	c.startLibriPutter()
+	c.startLibriPutters()
 	assert.Equal(t, uint(0), testPub.nPubs)
 
 	// check enough publish errors should cause it to stop
@@ -123,13 +123,13 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 		err: errors.New("some Publish error"),
 	}
 	c.cache = &fixedCache{value: docBytes}
-	c.publisher = testPub
+	c.libriPublisher = testPub
 	for i := 0; i < libriPutterErrQueueSize; i++ {
 		c.libriPutQueue <- "some key"
 	}
 	go c.Serve(func(s *grpc.Server) {}, func() {})
 	c.WaitUntilStarted()
-	c.startLibriPutter()
+	c.startLibriPutters()
 	assert.Equal(t, uint(0), testPub.nPubs)
 
 	// check enough libri put errors should cause it to stop
@@ -137,7 +137,7 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	assert.Nil(t, err)
 	c.cache = &fixedCache{value: docBytes}
 	testPub = &fixedPublisher{}
-	c.publisher = testPub
+	c.libriPublisher = testPub
 	testAR := &fixedAccessRecorder{
 		libriPutErr: errors.New("some access recorder libri put error"),
 	}
@@ -147,7 +147,7 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	}
 	go c.Serve(func(s *grpc.Server) {}, func() {})
 	c.WaitUntilStarted()
-	c.startLibriPutter()
+	c.startLibriPutters()
 	assert.True(t, testPub.nPubs > 0)
 	assert.Equal(t, uint(0), testAR.nLibriPuts)
 }
