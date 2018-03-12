@@ -10,6 +10,7 @@ import (
 	"github.com/elxirhealth/courier/pkg/cache"
 	"github.com/elxirhealth/courier/pkg/server"
 	bserver "github.com/elxirhealth/service-base/pkg/server"
+	bstorage "github.com/elxirhealth/service-base/pkg/server/storage"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -26,7 +27,7 @@ const (
 	libriPutQueueSizeFlag      = "libriPutQueueSize"
 	gcpProjectIDFlag           = "gcpProjectID"
 	librariansFlag             = "librarians"
-	cacheInMemoryStorageFlag   = "cacheInMemoryStorage"
+	cacheMemoryStorageFlag     = "cacheMemoryStorage"
 	cacheDataStoreStorageFlag  = "cacheDataStoreStorage"
 	cacheRecentWindowDaysFlag  = "cacheRecentWindowDays"
 	cacheLRUSizeFlag           = "cacheLRUSize"
@@ -74,7 +75,7 @@ func init() {
 	startCmd.Flags().String(gcpProjectIDFlag, "", "GCP project ID")
 	startCmd.Flags().StringSlice(librariansFlag, []string{},
 		"space-separated libri librarian addresses")
-	startCmd.Flags().Bool(cacheInMemoryStorageFlag, true,
+	startCmd.Flags().Bool(cacheMemoryStorageFlag, true,
 		"cache uses in-memory storage")
 	startCmd.Flags().Bool(cacheDataStoreStorageFlag, false,
 		"cache uses GCP DataStore storage")
@@ -104,7 +105,7 @@ func getCourierConfig() (*server.Config, error) {
 	}
 
 	cacheConfig := &cache.Parameters{
-		StorageType:       cacheStorage,
+		Type:              cacheStorage,
 		RecentWindowDays:  viper.GetInt(cacheRecentWindowDaysFlag),
 		LRUCacheSize:      uint(viper.GetInt(cacheLRUSizeFlag)),
 		EvictionBatchSize: uint(viper.GetInt(cacheEvictionBatchSizeFlag)),
@@ -131,15 +132,15 @@ func getCourierConfig() (*server.Config, error) {
 	return c, nil
 }
 
-func getCacheStorageType() (cache.StorageType, error) {
-	if viper.GetBool(cacheInMemoryStorageFlag) && viper.GetBool(cacheDataStoreStorageFlag) {
-		return cache.Unspecified, errMultipleCacheStorageTypes
+func getCacheStorageType() (bstorage.Type, error) {
+	if viper.GetBool(cacheMemoryStorageFlag) && viper.GetBool(cacheDataStoreStorageFlag) {
+		return bstorage.Unspecified, errMultipleCacheStorageTypes
 	}
-	if viper.GetBool(cacheInMemoryStorageFlag) {
-		return cache.InMemory, nil
+	if viper.GetBool(cacheMemoryStorageFlag) {
+		return bstorage.Memory, nil
 	}
 	if viper.GetBool(cacheDataStoreStorageFlag) {
-		return cache.DataStore, nil
+		return bstorage.DataStore, nil
 	}
-	return cache.Unspecified, errNoCacheStorateType
+	return bstorage.Unspecified, errNoCacheStorateType
 }

@@ -3,25 +3,13 @@ package cache
 import (
 	"time"
 
+	bstorage "github.com/elxirhealth/service-base/pkg/server/storage"
 	"go.uber.org/zap/zapcore"
 )
 
 const (
-	// Unspecified indicates when the storage type is not specified (and thus should take the
-	// default value).
-	Unspecified StorageType = iota
-
-	// InMemory indicates an ephemeral, in-memory (and thus not highly available) Cache. This
-	// storage layer should generally only be used during testing and not in production.
-	InMemory
-
-	// DataStore indicates a (highly available) Cache backed by GCP DataStore.
-	DataStore
-)
-
-const (
 	// DefaultStorage is the default storage type.
-	DefaultStorage = InMemory
+	DefaultStorage = bstorage.Memory
 
 	// DefaultRecentWindowDays is the default number of days in the recent window.
 	DefaultRecentWindowDays = 7
@@ -37,24 +25,13 @@ const (
 
 	// DefaultEvictionQueryTimeout is the default timeout for eviction queries.
 	DefaultEvictionQueryTimeout = 5 * time.Second
+
+	// DefaultCRUDTimeout is the default timeout for get, put, and delete DataStore operations.
+	DefaultCRUDTimeout = 1 * time.Second
 )
 
-// StorageType indicates how the Cache is stored.
-type StorageType int
-
-func (t StorageType) String() string {
-	switch t {
-	case InMemory:
-		return "InMemory"
-	case DataStore:
-		return "DataStore"
-	default:
-		return "Unspecified"
-	}
-}
-
 // Cache stores documents in a quasi-LRU cache. Implementations of this interface define how the
-// storage layer works.
+// bstorage layer works.
 type Cache interface {
 	// Put stores the marshaled document value at the hex of its key.
 	Put(key string, value []byte) error
@@ -93,34 +70,43 @@ type AccessRecorder interface {
 
 // Parameters defines the parameters used by the cache implementation.
 type Parameters struct {
-	StorageType          StorageType
+	Type                 bstorage.Type
 	RecentWindowDays     int
 	LRUCacheSize         uint
 	EvictionBatchSize    uint
 	EvictionPeriod       time.Duration
 	EvictionQueryTimeout time.Duration
+	GetTimeout           time.Duration
+	PutTimeout           time.Duration
+	DeleteTimeout        time.Duration
 }
 
 // MarshalLogObject writes the params to the given object encoder.
 func (p *Parameters) MarshalLogObject(oe zapcore.ObjectEncoder) error {
-	oe.AddString(logStorageType, p.StorageType.String())
+	oe.AddString(logStorageType, p.Type.String())
 	oe.AddInt(logRecentWindowDays, p.RecentWindowDays)
 	oe.AddUint(logLRUCacheSize, p.LRUCacheSize)
 	oe.AddUint(logEvictionBatchSize, p.EvictionBatchSize)
 	oe.AddDuration(logEvictionPeriod, p.EvictionPeriod)
 	oe.AddDuration(logEvictionQueryTimeout, p.EvictionQueryTimeout)
+	oe.AddDuration(logGetTimeout, p.GetTimeout)
+	oe.AddDuration(logPutTimeout, p.PutTimeout)
+	oe.AddDuration(logDeleteTimeout, p.DeleteTimeout)
 	return nil
 }
 
 // NewDefaultParameters returns a new instance of default cache parameter values.
 func NewDefaultParameters() *Parameters {
 	return &Parameters{
-		StorageType:          DefaultStorage,
+		Type:                 DefaultStorage,
 		RecentWindowDays:     DefaultRecentWindowDays,
 		LRUCacheSize:         DefaultLRUCacheSize,
 		EvictionBatchSize:    DefaultEvictionBatchSize,
 		EvictionPeriod:       DefaultEvictionPeriod,
 		EvictionQueryTimeout: DefaultEvictionQueryTimeout,
+		GetTimeout:           DefaultCRUDTimeout,
+		PutTimeout:           DefaultCRUDTimeout,
+		DeleteTimeout:        DefaultCRUDTimeout,
 	}
 }
 

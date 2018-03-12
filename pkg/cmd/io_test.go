@@ -5,7 +5,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/elxirhealth/courier/pkg/cache"
 	"github.com/elxirhealth/courier/pkg/server"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -17,7 +16,6 @@ func TestTestIO(t *testing.T) {
 
 	// start in-memory courier w/o librarians, so all libri puts will just be queued
 	config := server.NewDefaultConfig()
-	config.Cache.StorageType = cache.InMemory
 	config.LibriPutQueueSize = nDocs * 2
 	config.LogLevel = zapcore.DebugLevel
 	config.ServerPort = 10200

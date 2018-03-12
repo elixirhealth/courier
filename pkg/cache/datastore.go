@@ -9,7 +9,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/drausin/libri/libri/common/id"
-	"github.com/elxirhealth/service-base/pkg/server/storage"
+	bstorage "github.com/elxirhealth/service-base/pkg/server/storage"
 	"go.uber.org/zap"
 	"google.golang.org/api/iterator"
 )
@@ -50,7 +50,8 @@ type MarshaledDocument struct {
 }
 
 type datastoreCache struct {
-	client         storage.DatastoreClient
+	params         *Parameters
+	client         bstorage.DatastoreClient
 	accessRecorder AccessRecorder
 	logger         *zap.Logger
 }
@@ -66,7 +67,7 @@ func NewDatastore(
 	if err != nil {
 		return nil, nil, err
 	}
-	wrappedClient := &storage.DatastoreClientImpl{Inner: client}
+	wrappedClient := &bstorage.DatastoreClientImpl{Inner: client}
 	ar := &datastoreAccessRecorder{
 		client: wrappedClient,
 		iter:   &datastoreIteratorImpl{},
@@ -74,6 +75,7 @@ func NewDatastore(
 		logger: logger,
 	}
 	return &datastoreCache{
+		params:         params,
 		client:         wrappedClient,
 		accessRecorder: ar,
 		logger:         logger,
@@ -89,7 +91,9 @@ func (c *datastoreCache) Put(key string, value []byte) error {
 	}
 	dsKey := datastore.NameKey(documentKind, key, nil)
 	existingValue := &MarshaledDocument{}
-	err := c.client.Get(dsKey, existingValue)
+	ctx, cancel := context.WithTimeout(context.Background(), c.params.GetTimeout)
+	err := c.client.Get(ctx, dsKey, existingValue)
+	cancel()
 	if err != nil && err != datastore.ErrNoSuchEntity {
 		return err
 	}
@@ -105,9 +109,12 @@ func (c *datastoreCache) Put(key string, value []byte) error {
 	if err != nil {
 		return err
 	}
-	if _, err = c.client.Put(dsKey, docValue); err != nil {
+	ctx, cancel = context.WithTimeout(context.Background(), c.params.PutTimeout)
+	if _, err = c.client.Put(ctx, dsKey, docValue); err != nil {
+		cancel()
 		return err
 	}
+	cancel()
 	if err = c.accessRecorder.CachePut(key); err != nil {
 		return err
 	}
@@ -121,7 +128,9 @@ func (c *datastoreCache) Get(key string) ([]byte, error) {
 	logger.Debug("getting from cache")
 	cacheKey := datastore.NameKey(documentKind, key, nil)
 	existingCacheValue := &MarshaledDocument{}
-	if err := c.client.Get(cacheKey, existingCacheValue); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), c.params.GetTimeout)
+	defer cancel()
+	if err := c.client.Get(ctx, cacheKey, existingCacheValue); err != nil {
 		if err == datastore.ErrNoSuchEntity {
 			logger.Debug("cache does not have value")
 			return nil, ErrMissingValue
@@ -153,7 +162,9 @@ func (c *datastoreCache) EvictNext() error {
 	if err = c.accessRecorder.Evict(keyNames); err != nil {
 		return err
 	}
-	if err = c.client.Delete(dsKeys); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), c.params.DeleteTimeout)
+	defer cancel()
+	if err = c.client.Delete(ctx, dsKeys); err != nil {
 		return err
 	}
 	c.logger.Info("evicted documents", zap.Int(logNEvicted, len(dsKeys)))
@@ -161,7 +172,7 @@ func (c *datastoreCache) EvictNext() error {
 }
 
 type datastoreAccessRecorder struct {
-	client storage.DatastoreClient
+	client bstorage.DatastoreClient
 	iter   datastoreIterator
 	params *Parameters
 	logger *zap.Logger
@@ -171,16 +182,22 @@ type datastoreAccessRecorder struct {
 // key.
 func (r *datastoreAccessRecorder) CachePut(key string) error {
 	dsKey := datastore.NameKey(accessRecordKind, key, nil)
-	err := r.client.Get(dsKey, &AccessRecord{})
+	ctx, cancel := context.WithTimeout(context.Background(), r.params.GetTimeout)
+	err := r.client.Get(ctx, dsKey, &AccessRecord{})
+	cancel()
 	if err != datastore.ErrNoSuchEntity {
 		// either real error or get worked fine (and err is nil), so record already exists;
 		// in both cases, we just want to return the err
 		return err
 	}
 	value := newCachePutAccessRecord()
-	_, err = r.client.Put(dsKey, value)
+	ctx, cancel = context.WithTimeout(context.Background(), r.params.PutTimeout)
+	defer cancel()
+	if _, err = r.client.Put(ctx, dsKey, value); err != nil {
+		return err
+	}
 	r.logger.Debug("put new access record", accessRecordFields(key, value)...)
-	return err
+	return nil
 }
 
 // CacheGet updates the access record's latest get time for the document with the given key.
@@ -202,7 +219,9 @@ func (r *datastoreAccessRecorder) CacheEvict(keys []string) error {
 	for i, key := range keys {
 		dsKeys[i] = datastore.NameKey(accessRecordKind, key, nil)
 	}
-	if err := r.client.Delete(dsKeys); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), r.params.DeleteTimeout)
+	defer cancel()
+	if err := r.client.Delete(ctx, dsKeys); err != nil {
 		return err
 	}
 	r.logger.Debug("evicted access records", zap.Int(logNValues, len(keys)))
@@ -272,7 +291,9 @@ func (r *datastoreAccessRecorder) Evict(keys []string) error {
 	for i, keyName := range keys {
 		dsKeys[i] = datastore.NameKey(accessRecordKind, keyName, nil)
 	}
-	if err := r.client.Delete(dsKeys); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), r.params.DeleteTimeout)
+	defer cancel()
+	if err := r.client.Delete(ctx, dsKeys); err != nil {
 		return err
 	}
 	r.logger.Debug("evicted access records", zap.Int(logNEvicted, len(dsKeys)))
@@ -282,12 +303,17 @@ func (r *datastoreAccessRecorder) Evict(keys []string) error {
 func (r *datastoreAccessRecorder) update(key string, update *AccessRecord) error {
 	dsKey := datastore.NameKey(accessRecordKind, key, nil)
 	existing := &AccessRecord{}
-	if err := r.client.Get(dsKey, existing); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), r.params.GetTimeout)
+	if err := r.client.Get(ctx, dsKey, existing); err != nil {
+		cancel()
 		return err
 	}
+	cancel()
 	updated := *existing
 	updateAccessRecord(&updated, update)
-	if _, err := r.client.Put(dsKey, &updated); err != nil {
+	ctx, cancel = context.WithTimeout(context.Background(), r.params.PutTimeout)
+	defer cancel()
+	if _, err := r.client.Put(ctx, dsKey, &updated); err != nil {
 		return err
 	}
 	r.logger.Debug("updated access record",

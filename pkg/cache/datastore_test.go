@@ -25,9 +25,11 @@ func TestDatastoreCache_PutGet_ok(t *testing.T) {
 	for _, valueSize := range valueSizes {
 		accessRecorderDSClient := &fixedDatastoreClient{}
 		ds := datastoreCache{
+			params: NewDefaultParameters(),
 			client: &fixedDatastoreClient{},
 			logger: lg,
 			accessRecorder: &datastoreAccessRecorder{
+				params: NewDefaultParameters(),
 				client: accessRecorderDSClient,
 				logger: lg,
 			},
@@ -67,6 +69,7 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 
 	// bad key
 	ds := &datastoreCache{
+		params:         NewDefaultParameters(),
 		client:         &fixedDatastoreClient{},
 		accessRecorder: &fixedAccessRecorder{},
 		logger:         lg,
@@ -76,6 +79,7 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 
 	// get error
 	ds = &datastoreCache{
+		params: NewDefaultParameters(),
 		client: &fixedDatastoreClient{
 			getErr: errors.New("some get error"),
 		},
@@ -88,6 +92,7 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 
 	// different values for same key
 	ds = &datastoreCache{
+		params:         NewDefaultParameters(),
 		client:         &fixedDatastoreClient{},
 		accessRecorder: &fixedAccessRecorder{},
 		logger:         lg,
@@ -99,6 +104,7 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 
 	// value too large
 	ds = &datastoreCache{
+		params:         NewDefaultParameters(),
 		client:         &fixedDatastoreClient{},
 		accessRecorder: &fixedAccessRecorder{},
 		logger:         lg,
@@ -108,6 +114,7 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 
 	// doc put error
 	ds = &datastoreCache{
+		params: NewDefaultParameters(),
 		client: &fixedDatastoreClient{
 			putErr: errors.New("some put error"),
 		},
@@ -119,6 +126,7 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 
 	// access recorder error
 	ds = &datastoreCache{
+		params: NewDefaultParameters(),
 		client: &fixedDatastoreClient{},
 		accessRecorder: &fixedAccessRecorder{
 			cachePutErr: errors.New("some put error"),
@@ -135,6 +143,7 @@ func TestDatastoreCache_Get_err(t *testing.T) {
 
 	// missing doc error
 	ds := &datastoreCache{
+		params: NewDefaultParameters(),
 		client: &fixedDatastoreClient{
 			getErr: datastore.ErrNoSuchEntity,
 		},
@@ -148,6 +157,7 @@ func TestDatastoreCache_Get_err(t *testing.T) {
 
 	// other doc get error
 	ds = &datastoreCache{
+		params: NewDefaultParameters(),
 		client: &fixedDatastoreClient{
 			getErr: errors.New("some get error"),
 		},
@@ -161,6 +171,7 @@ func TestDatastoreCache_Get_err(t *testing.T) {
 
 	// access recorder error
 	ds = &datastoreCache{
+		params: NewDefaultParameters(),
 		client: &fixedDatastoreClient{
 			value: &MarshaledDocument{
 				ValuePart1: []byte("some document"),
@@ -183,6 +194,7 @@ func TestDatastoreCache_EvictNext_ok(t *testing.T) {
 		nextEvictions: []string{}, // nothing to evict
 	}
 	dc := &datastoreCache{
+		params:         NewDefaultParameters(),
 		client:         dsClient,
 		accessRecorder: ar,
 		logger:         lg,
@@ -195,6 +207,7 @@ func TestDatastoreCache_EvictNext_ok(t *testing.T) {
 		nextEvictions: evictionKeys,
 	}
 	dc = &datastoreCache{
+		params:         NewDefaultParameters(),
 		client:         dsClient,
 		accessRecorder: ar,
 		logger:         lg,
@@ -213,6 +226,7 @@ func TestDatastoreCache_EvictNext_err(t *testing.T) {
 	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{}
 	dc := &datastoreCache{
+		params: NewDefaultParameters(),
 		client: dsClient,
 		accessRecorder: &fixedAccessRecorder{
 			getEvictionBatchErr: errors.New("some getEvictionBatch error"),
@@ -223,6 +237,7 @@ func TestDatastoreCache_EvictNext_err(t *testing.T) {
 	assert.NotNil(t, err)
 
 	dc = &datastoreCache{
+		params: NewDefaultParameters(),
 		client: dsClient,
 		accessRecorder: &fixedAccessRecorder{
 			nextEvictions: []string{"key1", "key2"},
@@ -234,6 +249,7 @@ func TestDatastoreCache_EvictNext_err(t *testing.T) {
 	assert.NotNil(t, err)
 
 	dc = &datastoreCache{
+		params: NewDefaultParameters(),
 		client: &fixedDatastoreClient{
 			deleteErr: errors.New("some delete error"),
 		},
@@ -250,6 +266,7 @@ func TestDatastoreAccessRecorder_CachePut_ok(t *testing.T) {
 	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{}
 	ds := &datastoreAccessRecorder{
+		params: NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
@@ -272,6 +289,7 @@ func TestDatastoreAccessRecorder_CachePut_err(t *testing.T) {
 		getErr: errors.New("some get error"),
 	}
 	ds := datastoreAccessRecorder{
+		params: NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
@@ -282,6 +300,7 @@ func TestDatastoreAccessRecorder_CachePut_err(t *testing.T) {
 		putErr: errors.New("some put error"),
 	}
 	ds = datastoreAccessRecorder{
+		params: NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
@@ -295,6 +314,7 @@ func TestDatastoreAccessRecorder_CacheGet(t *testing.T) {
 		value: &AccessRecord{CachePutTimeEarliest: time.Now()},
 	}
 	ds := datastoreAccessRecorder{
+		params: NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
@@ -311,6 +331,7 @@ func TestDatastoreAccessRecorder_LibriPut(t *testing.T) {
 		value: &AccessRecord{CachePutTimeEarliest: time.Now()},
 	}
 	ds := datastoreAccessRecorder{
+		params: NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
@@ -326,6 +347,7 @@ func TestDatastoreAccessRecorder_CacheEvict_ok(t *testing.T) {
 	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{}
 	ds := datastoreAccessRecorder{
+		params: NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
@@ -345,6 +367,7 @@ func TestDatastoreAccessRecorder_CacheEvict_err(t *testing.T) {
 		deleteErr: errors.New("some delete error"),
 	}
 	ds := datastoreAccessRecorder{
+		params: NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
@@ -448,6 +471,7 @@ func TestDatastoreAccessRecorder_Evict_ok(t *testing.T) {
 	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{}
 	ds := datastoreAccessRecorder{
+		params: NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
@@ -468,6 +492,7 @@ func TestDatastoreAccessRecorder_Evict_err(t *testing.T) {
 		deleteErr: errors.New("some delete error"),
 	}
 	ds := datastoreAccessRecorder{
+		params: NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
@@ -482,7 +507,10 @@ func TestDatastoreAccessRecorder_update_err(t *testing.T) {
 	dsClient := &fixedDatastoreClient{
 		getErr: datastore.ErrNoSuchEntity,
 	}
-	ds := datastoreAccessRecorder{client: dsClient}
+	ds := datastoreAccessRecorder{
+		params: NewDefaultParameters(),
+		client: dsClient,
+	}
 	err := ds.LibriPut("some key without log")
 	assert.Equal(t, datastore.ErrNoSuchEntity, err)
 
@@ -492,6 +520,7 @@ func TestDatastoreAccessRecorder_update_err(t *testing.T) {
 		putErr: errors.New("some put error"),
 	}
 	ds = datastoreAccessRecorder{
+		params: NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
@@ -546,11 +575,25 @@ type fixedDatastoreClient struct {
 	runResult  *datastore.Iterator
 }
 
+func (f *fixedDatastoreClient) PutMulti(
+	context.Context, []*datastore.Key, interface{},
+) ([]*datastore.Key, error) {
+	panic("implement me")
+}
+
+func (f *fixedDatastoreClient) GetMulti(
+	ctx context.Context, keys []*datastore.Key, dst interface{},
+) error {
+	panic("implement me")
+}
+
 func (f *fixedDatastoreClient) Count(ctx context.Context, q *datastore.Query) (int, error) {
 	return f.countValue, f.countErr
 }
 
-func (f *fixedDatastoreClient) Put(key *datastore.Key, value interface{}) (*datastore.Key, error) {
+func (f *fixedDatastoreClient) Put(
+	ctx context.Context, key *datastore.Key, value interface{},
+) (*datastore.Key, error) {
 	if f.putErr != nil {
 		return nil, f.putErr
 	}
@@ -558,7 +601,9 @@ func (f *fixedDatastoreClient) Put(key *datastore.Key, value interface{}) (*data
 	return key, nil
 }
 
-func (f *fixedDatastoreClient) Get(key *datastore.Key, dest interface{}) error {
+func (f *fixedDatastoreClient) Get(
+	ctx context.Context, key *datastore.Key, dest interface{},
+) error {
 	if f.getErr != nil {
 		return f.getErr
 	}
@@ -578,7 +623,7 @@ func (f *fixedDatastoreClient) Get(key *datastore.Key, dest interface{}) error {
 	return nil
 }
 
-func (f *fixedDatastoreClient) Delete(keys []*datastore.Key) error {
+func (f *fixedDatastoreClient) Delete(ctx context.Context, keys []*datastore.Key) error {
 	f.value = nil
 	f.deleteKeys = keys
 	return f.deleteErr

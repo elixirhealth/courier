@@ -31,6 +31,9 @@ const (
 	logEvictionBatchSize    = "eviction_batch_size"
 	logEvictionPeriod       = "eviction_period"
 	logEvictionQueryTimeout = "eviction_query_timeout"
+	logGetTimeout           = "get_timeout"
+	logPutTimeout           = "put_timeout"
+	logDeleteTimeout        = "delete_timeout"
 )
 
 func nextEvictionsFields(nEvictable int, lruCacheSize uint) []zapcore.Field {

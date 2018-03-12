@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/elxirhealth/courier/pkg/cache"
+	bstorage "github.com/elxirhealth/service-base/pkg/server/storage"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -65,10 +66,10 @@ func TestConfig_WithGCPProjectID(t *testing.T) {
 func TestConfig_WithCache(t *testing.T) {
 	c1, c2, c3 := &Config{}, &Config{}, &Config{}
 	c1.WithDefaultCache()
-	assert.Equal(t, c1.Cache.StorageType, c2.WithCache(nil).Cache.StorageType)
+	assert.Equal(t, c1.Cache.Type, c2.WithCache(nil).Cache.Type)
 	assert.NotEqual(t,
-		c1.Cache.StorageType,
-		c3.WithCache(&cache.Parameters{StorageType: cache.DataStore}).Cache.StorageType,
+		c1.Cache.Type,
+		c3.WithCache(&cache.Parameters{Type: bstorage.DataStore}).Cache.Type,
 	)
 }
 

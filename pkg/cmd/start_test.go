@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/elxirhealth/courier/pkg/cache"
+	bstorage "github.com/elxirhealth/service-base/pkg/server/storage"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap/zapcore"
@@ -39,7 +39,7 @@ func TestGetCourierConfig(t *testing.T) {
 	viper.Set(libriPutQueueSizeFlag, libriPutQueueSize)
 	viper.Set(gcpProjectIDFlag, gcpProjectID)
 	viper.Set(librariansFlag, strings.Join(librarians, " "))
-	viper.Set(cacheInMemoryStorageFlag, cacheInMemoryStorage)
+	viper.Set(cacheMemoryStorageFlag, cacheInMemoryStorage)
 	viper.Set(cacheDataStoreStorageFlag, cacheDataStoreStorage)
 	viper.Set(cacheRecentWindowDaysFlag, cacheRecentWindowDays)
 	viper.Set(cacheLRUSizeFlag, cacheLRUSize)
@@ -60,7 +60,7 @@ func TestGetCourierConfig(t *testing.T) {
 	for i, l := range c.Librarians {
 		assert.Equal(t, librarians[i], l.String())
 	}
-	assert.Equal(t, cache.DataStore, c.Cache.StorageType)
+	assert.Equal(t, bstorage.DataStore, c.Cache.Type)
 	assert.Equal(t, cacheRecentWindowDays, c.Cache.RecentWindowDays)
 	assert.Equal(t, cacheLRUSize, c.Cache.LRUCacheSize)
 	assert.Equal(t, cacheEvictionBatchSize, c.Cache.EvictionBatchSize)
@@ -68,27 +68,27 @@ func TestGetCourierConfig(t *testing.T) {
 }
 
 func TestGetCacheStorageType(t *testing.T) {
-	viper.Set(cacheInMemoryStorageFlag, true)
+	viper.Set(cacheMemoryStorageFlag, true)
 	viper.Set(cacheDataStoreStorageFlag, false)
 	st, err := getCacheStorageType()
 	assert.Nil(t, err)
-	assert.Equal(t, cache.InMemory, st)
+	assert.Equal(t, bstorage.Memory, st)
 
-	viper.Set(cacheInMemoryStorageFlag, false)
+	viper.Set(cacheMemoryStorageFlag, false)
 	viper.Set(cacheDataStoreStorageFlag, true)
 	st, err = getCacheStorageType()
 	assert.Nil(t, err)
-	assert.Equal(t, cache.DataStore, st)
+	assert.Equal(t, bstorage.DataStore, st)
 
-	viper.Set(cacheInMemoryStorageFlag, true)
+	viper.Set(cacheMemoryStorageFlag, true)
 	viper.Set(cacheDataStoreStorageFlag, true)
 	st, err = getCacheStorageType()
 	assert.Equal(t, errMultipleCacheStorageTypes, err)
-	assert.Equal(t, cache.Unspecified, st)
+	assert.Equal(t, bstorage.Unspecified, st)
 
-	viper.Set(cacheInMemoryStorageFlag, false)
+	viper.Set(cacheMemoryStorageFlag, false)
 	viper.Set(cacheDataStoreStorageFlag, false)
 	st, err = getCacheStorageType()
 	assert.Equal(t, errNoCacheStorateType, err)
-	assert.Equal(t, cache.Unspecified, st)
+	assert.Equal(t, bstorage.Unspecified, st)
 }
