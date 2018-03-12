@@ -60,7 +60,11 @@ func newCourier(config *Config) (*Courier, error) {
 		return nil, err
 	}
 	rng := rand.New(rand.NewSource(clientID.ID().Int().Int64()))
-	librarians, err := client.NewUniformBalancer(config.Librarians, rng)
+	clients, err := client.NewDefaultLRUPool()
+	if err != nil {
+		return nil, err
+	}
+	librarians, err := client.NewUniformBalancer(config.Librarians, clients, rng)
 	if err != nil {
 		return nil, err
 	}

@@ -235,7 +235,7 @@ func newCourierConfigs(librarianAddrs []*net.TCPAddr, params *parameters) (
 
 	// set eviction params to ensure that evictions actually happen during test
 	cacheParams := &cache.Parameters{
-		StorageType:          cache.DataStore,
+		Type:                 cache.DataStore,
 		LRUCacheSize:         4,
 		EvictionBatchSize:    4,
 		EvictionQueryTimeout: 5 * time.Second,

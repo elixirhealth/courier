@@ -3,6 +3,7 @@ package server
 import (
 	"github.com/drausin/libri/libri/common/ecid"
 	"github.com/elxirhealth/courier/pkg/cache"
+	bstorage "github.com/elxirhealth/service-base/pkg/server/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -20,14 +21,14 @@ func getClientID(config *Config) (ecid.ID, error) {
 }
 
 func getCache(config *Config, logger *zap.Logger) (cache.Cache, cache.AccessRecorder, error) {
-	switch config.Cache.StorageType {
-	case cache.DataStore:
+	switch config.Cache.Type {
+	case bstorage.DataStore:
 		c, ar, err := cache.NewDatastore(config.GCPProjectID, config.Cache, logger)
 		if err != nil {
 			return nil, nil, err
 		}
 		return c, ar, nil
-	case cache.InMemory:
+	case bstorage.Memory:
 		c, ar := cache.NewMemory(config.Cache, logger)
 		return c, ar, nil
 	default:

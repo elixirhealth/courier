@@ -12,6 +12,7 @@ import (
 	"github.com/elxirhealth/courier/pkg/cache"
 	api "github.com/elxirhealth/courier/pkg/courierapi"
 	"github.com/elxirhealth/service-base/pkg/server"
+	bstorage "github.com/elxirhealth/service-base/pkg/server/storage"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -35,7 +36,7 @@ func TestNewCourier_err(t *testing.T) {
 	badConfigs := map[string]*Config{
 		"missing clientID file": NewDefaultConfig().WithClientIDFilepath("missing.der"),
 		"emptyProjectID": NewDefaultConfig().WithCache(
-			&cache.Parameters{StorageType: cache.DataStore},
+			&cache.Parameters{Type: bstorage.DataStore},
 		),
 		"empty librarian addrs": NewDefaultConfig().WithLibrarianAddrs([]*net.TCPAddr{}),
 	}
