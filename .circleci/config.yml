@@ -40,7 +40,11 @@ jobs:
       - run: make test
       - run: make lint
       - run: make acceptance
-      - run: make demo
+      - run:
+          name: demo
+          command: |
+            docker login -u _json_key -p "${GCR_SVC_JSON}" gcr.io
+            make demo
       - run:
           name: publish docker image
           command: |
