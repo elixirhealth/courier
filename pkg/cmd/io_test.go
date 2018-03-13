@@ -19,6 +19,7 @@ func TestTestIO(t *testing.T) {
 	// start in-memory courier w/o librarians, so all libri puts will just be queued
 	libAddrs := []*net.TCPAddr{{IP: net.ParseIP("localhost"), Port: 20100}}
 	config := server.NewDefaultConfig().WithLibrarianAddrs(libAddrs)
+	config.SubscribeTo.NSubscriptions = 0
 	config.LibriPutQueueSize = nDocs * 2
 	config.LogLevel = zapcore.DebugLevel
 	config.ServerPort = 10200
