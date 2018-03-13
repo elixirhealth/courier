@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"log"
+	"net"
 	"os"
 
 	cerrors "github.com/drausin/libri/libri/common/errors"
@@ -33,9 +34,15 @@ const (
 	cacheLRUSizeFlag           = "cacheLRUSize"
 	cacheEvictionBatchSizeFlag = "cacheEvictionBatchSize"
 	cacheEvictionPeriodFlag    = "cacheEvictionPeriod"
+	catalogFlag                = "catalog"
+	nCatalogPuttersFlag        = "nCatalogPutters"
+	catalogPutQueueSizeFlag    = "catalogPutQueueSize"
+	catalogTimeoutFlag         = "catalogTimeout"
 )
 
 var (
+	errMissingLibrarians         = errors.New("missing librarian addresses")
+	errMissingCatalog            = errors.New("missing catalog address")
 	errMultipleCacheStorageTypes = errors.New("multiple cache storage types specified")
 	errNoCacheStorageType        = errors.New("no cache storage type specified")
 )
@@ -71,7 +78,7 @@ func init() {
 	startCmd.Flags().Uint(nLibrarianPuttersFlag, server.DefaultNLibriPutters,
 		"number of workers Putting documents into libri")
 	startCmd.Flags().Uint(libriPutQueueSizeFlag, server.DefaultLibriPutQueueSize,
-		"size of the queue for document to Put into libri")
+		"size of the queue for documents to Put into libri")
 	startCmd.Flags().String(gcpProjectIDFlag, "", "GCP project ID")
 	startCmd.Flags().StringSlice(librariansFlag, []string{},
 		"space-separated libri librarian addresses")
@@ -87,6 +94,14 @@ func init() {
 		"size of each batch of evictions")
 	startCmd.Flags().Duration(cacheEvictionPeriodFlag, cache.DefaultEvictionPeriod,
 		"period between evictions")
+	startCmd.Flags().String(catalogFlag, "",
+		"catalog service address")
+	startCmd.Flags().Uint(nCatalogPuttersFlag, server.DefaultNCatalogPutters,
+		"number of workers putting publications into the catalog")
+	startCmd.Flags().Uint(catalogPutQueueSizeFlag, server.DefaultCatalogPutQueueSize,
+		"size of the queue for publications to put into the catalog")
+	startCmd.Flags().Duration(catalogTimeoutFlag, server.DefaultCatalogPutTimeout,
+		"timeout for catalog Put requests")
 
 	// bind viper flags
 	viper.SetEnvPrefix(envVarPrefix) // look for env vars with "COURIER_" prefix
@@ -95,7 +110,19 @@ func init() {
 }
 
 func getCourierConfig() (*server.Config, error) {
-	librarianAddrs, err := parse.Addrs(viper.GetStringSlice(librariansFlag))
+	librarianStrAddrs := viper.GetStringSlice(librariansFlag)
+	if len(librarianStrAddrs) == 0 {
+		return nil, errMissingLibrarians
+	}
+	librarianAddrs, err := parse.Addrs(librarianStrAddrs)
+	if err != nil {
+		return nil, err
+	}
+	catalogStrAddr := viper.GetString(catalogFlag)
+	if catalogStrAddr == "" {
+		return nil, errMissingCatalog
+	}
+	catalogAddr, err := net.ResolveTCPAddr("tcp4", catalogStrAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -104,13 +131,12 @@ func getCourierConfig() (*server.Config, error) {
 		return nil, err
 	}
 
-	cacheConfig := &cache.Parameters{
-		Type:              cacheStorage,
-		RecentWindowDays:  viper.GetInt(cacheRecentWindowDaysFlag),
-		LRUCacheSize:      uint(viper.GetInt(cacheLRUSizeFlag)),
-		EvictionBatchSize: uint(viper.GetInt(cacheEvictionBatchSizeFlag)),
-		EvictionPeriod:    viper.GetDuration(cacheEvictionPeriodFlag),
-	}
+	cacheConfig := cache.NewDefaultParameters()
+	cacheConfig.Type = cacheStorage
+	cacheConfig.RecentWindowDays = viper.GetInt(cacheRecentWindowDaysFlag)
+	cacheConfig.LRUCacheSize = uint(viper.GetInt(cacheLRUSizeFlag))
+	cacheConfig.EvictionBatchSize = uint(viper.GetInt(cacheEvictionBatchSizeFlag))
+	cacheConfig.EvictionPeriod = viper.GetDuration(cacheEvictionPeriodFlag)
 
 	c := server.NewDefaultConfig()
 	c.WithServerPort(uint(viper.GetInt(serverPortFlag))).
@@ -124,7 +150,11 @@ func getCourierConfig() (*server.Config, error) {
 		WithLibriPutQueueSize(uint(viper.GetInt(libriPutQueueSizeFlag))).
 		WithGCPProjectID(viper.GetString(gcpProjectIDFlag)).
 		WithLibrarianAddrs(librarianAddrs).
-		WithCache(cacheConfig)
+		WithCache(cacheConfig).
+		WithCatalogAddr(catalogAddr).
+		WithNCatalogPutters(uint(viper.GetInt(nCatalogPuttersFlag))).
+		WithCatalogPutQueueSize(uint(viper.GetInt(catalogPutQueueSizeFlag))).
+		WithCatalogPutTimeout(viper.GetDuration(catalogTimeoutFlag))
 
 	lg := lserver.NewDevLogger(c.LogLevel)
 	lg.Info("successfully parsed config", zap.Object("config", c))

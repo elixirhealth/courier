@@ -28,6 +28,10 @@ func TestGetCourierConfig(t *testing.T) {
 	cacheLRUSize := uint(1024)
 	cacheEvictionBatchSize := uint(32)
 	cacheEvictionPeriod := 32 * time.Minute
+	catalog := "127.0.0.1:20100"
+	nCatalogPutters := uint(12)
+	catalogPutQueueSize := uint(48)
+	catalogTimeout := 15 * time.Second
 
 	viper.Set(serverPortFlag, serverPort)
 	viper.Set(metricsPortFlag, metricsPort)
@@ -45,6 +49,10 @@ func TestGetCourierConfig(t *testing.T) {
 	viper.Set(cacheLRUSizeFlag, cacheLRUSize)
 	viper.Set(cacheEvictionBatchSizeFlag, cacheEvictionBatchSize)
 	viper.Set(cacheEvictionPeriodFlag, cacheEvictionPeriod)
+	viper.Set(catalogFlag, catalog)
+	viper.Set(nCatalogPuttersFlag, nCatalogPutters)
+	viper.Set(catalogPutQueueSizeFlag, catalogPutQueueSize)
+	viper.Set(catalogTimeoutFlag, catalogTimeout)
 
 	c, err := getCourierConfig()
 	assert.Nil(t, err)
@@ -65,6 +73,10 @@ func TestGetCourierConfig(t *testing.T) {
 	assert.Equal(t, cacheLRUSize, c.Cache.LRUCacheSize)
 	assert.Equal(t, cacheEvictionBatchSize, c.Cache.EvictionBatchSize)
 	assert.Equal(t, cacheEvictionPeriod, c.Cache.EvictionPeriod)
+	assert.Equal(t, catalog, c.Catalog.String())
+	assert.Equal(t, nCatalogPutters, c.NCatalogPutters)
+	assert.Equal(t, catalogPutQueueSize, c.CatalogPutQueueSize)
+	assert.Equal(t, catalogTimeout, c.CatalogPutTimeout)
 }
 
 func TestGetCacheStorageType(t *testing.T) {

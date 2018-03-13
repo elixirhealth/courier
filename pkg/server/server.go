@@ -34,6 +34,8 @@ var (
 
 	// ErrFullLibriPutQueue indicates when the libri put queue is full.
 	ErrFullLibriPutQueue = errors.New("full libri Put queue")
+
+	errMissingCatalog = errors.New("missing catalog address")
 )
 
 // Courier implements the CourierServer interface.
@@ -83,6 +85,9 @@ func newCourier(config *Config) (*Courier, error) {
 	putters := client.NewUniformPutterBalancer(uniformLibClients)
 	getter := client.NewRetryGetter(getters, true, config.LibriGetTimeout)
 	putter := client.NewRetryPutter(putters, config.LibriPutTimeout)
+	if config.Catalog == nil {
+		return nil, errMissingCatalog
+	}
 	catalog, err := catalogclient.NewInsecure(config.Catalog.String())
 	if err != nil {
 		return nil, err

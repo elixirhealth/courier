@@ -23,7 +23,8 @@ import (
 
 var (
 	okConfig = NewDefaultConfig().
-		WithLibrarianAddrs([]*net.TCPAddr{{IP: net.ParseIP("localhost"), Port: 20100}})
+		WithLibrarianAddrs([]*net.TCPAddr{{IP: net.ParseIP("localhost"), Port: 20100}}).
+		WithCatalogAddr(&net.TCPAddr{IP: net.ParseIP("localhost"), Port: 20200})
 )
 
 func init() {
@@ -49,7 +50,8 @@ func TestStart(t *testing.T) {
 
 func TestCourier_startEvictor(t *testing.T) {
 	config := NewDefaultConfig().
-		WithLibrarianAddrs([]*net.TCPAddr{{IP: net.ParseIP("localhost"), Port: 20100}})
+		WithLibrarianAddrs([]*net.TCPAddr{{IP: net.ParseIP("localhost"), Port: 20100}}).
+		WithCatalogAddr(&net.TCPAddr{IP: net.ParseIP("localhost"), Port: 20200})
 	config.Cache.EvictionPeriod = 10 * time.Millisecond
 
 	c, err := newCourier(config)

@@ -13,6 +13,8 @@ docker_cleanup() {
 # optional settings (generally defaults should be fine, but sometimes useful for debugging)
 LIBRI_LOG_LEVEL="${LIBRI_LOG_LEVEL:-INFO}"  # or DEBUG
 LIBRI_TIMEOUT="${LIBRI_TIMEOUT:-5}"  # 10, or 20 for really sketchy network
+CATALOG_LOG_LEVEL="${CATALOG_LOG_LEVEL:-INFO}"  # or DEBUG
+CATALOG_TIMEOUT="${CATALOG_TIMEOUT:-5}"  # 10, or 20 for really sketchy network
 COURIER_LOG_LEVEL="${COURIER_LOG_LEVEL:-INFO}"  # or DEBUG
 COURIER_TIMEOUT="${COURIER_TIMEOUT:-5}"  # 10, or 20 for really sketchy network
 COURIER_TEST_IO_N_DOCS="${COURIER_TEST_IO_N_DOCS:-8}"
@@ -24,6 +26,7 @@ LOCAL_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 LIBRI_IMAGE="daedalus2718/libri:latest"  # latest release
 N_LIBRARIANS=4
 COURIER_IMAGE="gcr.io/elxir-core-infra/courier:snapshot" # develop
+CATALOG_IMAGE="gcr.io/elxir-core-infra/catalog:snapshot" # develop
 
 echo
 echo "cleaning up from previous runs..."
@@ -64,15 +67,32 @@ docker run --rm --net=courier ${LIBRI_IMAGE} test health \
     --timeout "${LIBRI_TIMEOUT}"
 
 echo
-echo "starting courier..."
+echo "starting catalog..."
 port=10100
+name="catalog-0"
+docker run --name "${name}" --net=catalog -d -p ${port}:${port} ${CATALOG_IMAGE} \
+    start \
+    --logLevel "${CATALOG_LOG_LEVEL}" \
+    --serverPort ${port}
+catalog_addr="${name}:${port}"
+catalog_containers="${name}"
+
+echo
+echo "testing catalog health..."
+docker run --rm --net=catalog ${CATALOG_IMAGE} test health \
+    --catalogs "${catalog_addr}" \
+    --logLevel "${CATALOG_LOG_LEVEL}"
+
+echo
+echo "starting courier..."
+port=10200
 name="courier-0"
 docker run --name "${name}" --net=courier -d -p ${port}:${port} ${COURIER_IMAGE} \
     start \
     --logLevel "${LIBRI_LOG_LEVEL}" \
     --serverPort ${port} \
     --librarians ${librarian_addrs} \
-    --cacheMemoryStorage
+    --catalog ${catalog_addr}
 courier_addrs="${name}:${port}"
 courier_containers="${name}"
 

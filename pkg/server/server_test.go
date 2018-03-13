@@ -19,8 +19,7 @@ import (
 )
 
 func TestNewCourier_ok(t *testing.T) {
-	config := NewDefaultConfig().WithLibrarianAddrs(okConfig.Librarians)
-	c, err := newCourier(config)
+	c, err := newCourier(okConfig)
 	assert.Nil(t, err)
 	assert.NotNil(t, c.clientID)
 	assert.NotNil(t, c.cache)
@@ -29,7 +28,7 @@ func TestNewCourier_ok(t *testing.T) {
 	assert.NotNil(t, c.libriAcquirer)
 	assert.NotNil(t, c.libriPublisher)
 	assert.NotNil(t, c.libriPutQueue)
-	assert.Equal(t, config, c.config)
+	assert.Equal(t, okConfig, c.config)
 }
 
 func TestNewCourier_err(t *testing.T) {
