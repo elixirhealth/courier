@@ -48,9 +48,12 @@ func TestStart(t *testing.T) {
 }
 
 func TestCourier_startEvictor(t *testing.T) {
-	c, err := newCourier(okConfig)
+	config := NewDefaultConfig().
+		WithLibrarianAddrs([]*net.TCPAddr{{IP: net.ParseIP("localhost"), Port: 20100}})
+	config.Cache.EvictionPeriod = 10 * time.Millisecond
+
+	c, err := newCourier(config)
 	assert.Nil(t, err)
-	c.config.Cache.EvictionPeriod = 10 * time.Millisecond
 	testCache := &fixedCache{}
 	c.cache = testCache
 
