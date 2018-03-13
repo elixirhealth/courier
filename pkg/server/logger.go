@@ -12,14 +12,19 @@ const (
 	logKey       = "key"
 	logOperation = "operation"
 
-	logLibriGetTimeout   = "libri_get_timeout"
-	logLibriPutTimeout   = "libri_put_timeout"
-	logLibriPutQueueSize = "libri_put_queue_size"
-	logNLibriPutters     = "n_libri_putters"
-	logClientIDFilepath  = "client_id_filepath"
-	logGCPProjectID      = "gcp_project_id"
-	logCache             = "cache"
-	logLibrarians        = "librarians"
+	logLibriGetTimeout     = "libri_get_timeout"
+	logLibriPutTimeout     = "libri_put_timeout"
+	logLibriPutQueueSize   = "libri_put_queue_size"
+	logNLibriPutters       = "libri_n_putters"
+	logClientIDFilepath    = "client_id_filepath"
+	logGCPProjectID        = "gcp_project_id"
+	logCache               = "cache"
+	logLibrarians          = "librarians"
+	logCatalog             = "catalog"
+	logCatalogPutTimeout   = "catalog_put_timeout"
+	logSubscribeTo         = "subscribe_to"
+	logCatalogPutQueueSize = "catalog_put_queue_size"
+	logNCatalogPutters     = "catalog_n_putters"
 )
 
 func putDocumentFields(rq *courierapi.PutRequest, rp *courierapi.PutResponse) []zapcore.Field {
