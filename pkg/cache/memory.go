@@ -58,7 +58,9 @@ func (c *memoryCache) Put(key string, value []byte) error {
 func (c *memoryCache) Get(key string) ([]byte, error) {
 	logger := c.logger.With(zap.String("key", key))
 	logger.Debug("getting from cache")
+	c.mu.Lock()
 	value, in := c.docs[key]
+	c.mu.Unlock()
 	if !in {
 		return nil, ErrMissingValue
 	}
