@@ -22,7 +22,6 @@ const (
 	logLibrarians          = "librarians"
 	logCatalog             = "catalog"
 	logCatalogPutTimeout   = "catalog_put_timeout"
-	logSubscribeTo         = "subscribe_to"
 	logCatalogPutQueueSize = "catalog_put_queue_size"
 	logNCatalogPutters     = "catalog_n_putters"
 )
