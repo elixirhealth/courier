@@ -88,27 +88,35 @@ func (c *Config) MarshalLogObject(oe zapcore.ObjectEncoder) error {
 	if err := c.BaseConfig.MarshalLogObject(oe); err != nil {
 		return err
 	}
-	if err := oe.AddObject(logCache, c.Cache); err != nil {
-		return err
-	}
-	oe.AddDuration(logLibriGetTimeout, c.LibriGetTimeout)
-	oe.AddDuration(logLibriPutTimeout, c.LibriPutTimeout)
-	oe.AddUint(logLibriPutQueueSize, c.LibriPutQueueSize)
-	oe.AddUint(logNLibriPutters, c.NLibriPutters)
 	if c.ClientIDFilepath != "" {
 		oe.AddString(logClientIDFilepath, c.ClientIDFilepath)
-	}
-	if c.GCPProjectID != "" {
-		oe.AddString(logGCPProjectID, c.GCPProjectID)
-	}
-	if err := oe.AddObject(logCache, c.Cache); err != nil {
-		return err
 	}
 	las := make([]string, len(c.Librarians))
 	for i, la := range c.Librarians {
 		las[i] = la.String()
 	}
 	oe.AddString(logLibrarians, strings.Join(las, " "))
+	oe.AddDuration(logLibriGetTimeout, c.LibriGetTimeout)
+	oe.AddDuration(logLibriPutTimeout, c.LibriPutTimeout)
+	oe.AddUint(logLibriPutQueueSize, c.LibriPutQueueSize)
+	oe.AddUint(logNLibriPutters, c.NLibriPutters)
+	oe.AddString(logCatalog, c.Catalog.String())
+	oe.AddDuration(logCatalogPutTimeout, c.CatalogPutTimeout)
+	// TODO (drausin) once Libri supports
+	/*
+		if err := oe.AddObject(logSubscribeTo, c.SubscribeTo); err != nil {
+			return err
+		}
+	*/
+	oe.AddUint(logCatalogPutQueueSize, c.CatalogPutQueueSize)
+	oe.AddUint(logNCatalogPutters, c.NCatalogPutters)
+
+	if c.GCPProjectID != "" {
+		oe.AddString(logGCPProjectID, c.GCPProjectID)
+	}
+	if err := oe.AddObject(logCache, c.Cache); err != nil {
+		return err
+	}
 	return nil
 }
 

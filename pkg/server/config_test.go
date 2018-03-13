@@ -5,9 +5,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/drausin/libri/libri/common/subscribe"
 	"github.com/elxirhealth/courier/pkg/cache"
 	bstorage "github.com/elxirhealth/service-base/pkg/server/storage"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestNewDefaultConfig(t *testing.T) {
@@ -17,6 +20,13 @@ func TestNewDefaultConfig(t *testing.T) {
 	assert.NotEmpty(t, c.LibriPutQueueSize)
 	assert.NotEmpty(t, c.Cache)
 	assert.NotEmpty(t, c.SubscribeTo)
+}
+
+func TestConfig_MarshalLogObject(t *testing.T) {
+	oe := zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig())
+	c := NewDefaultConfig()
+	err := c.MarshalLogObject(oe)
+	assert.Nil(t, err)
 }
 
 func TestConfig_WithLibriGetTimeout(t *testing.T) {
@@ -69,6 +79,16 @@ func TestConfig_WithCatalogPutQueueSize(t *testing.T) {
 	c1.WithDefaultCatalogPutQueueSize()
 	assert.Equal(t, c1.CatalogPutQueueSize, c2.WithCatalogPutQueueSize(0).CatalogPutQueueSize)
 	assert.NotEqual(t, c1.CatalogPutQueueSize, c3.WithCatalogPutQueueSize(2).CatalogPutQueueSize)
+}
+
+func TestConfig_WithSubscribeTo(t *testing.T) {
+	c1, c2, c3 := &Config{}, &Config{}, &Config{}
+	c1.WithDefaultSubscribeTo()
+	assert.Equal(t, c1.SubscribeTo, c2.WithSubscribeTo(nil).SubscribeTo)
+	assert.NotEqual(t,
+		c1.SubscribeTo,
+		c3.WithSubscribeTo(&subscribe.ToParameters{}).SubscribeTo,
+	)
 }
 
 func TestConfig_WithNCatalogPutters(t *testing.T) {
