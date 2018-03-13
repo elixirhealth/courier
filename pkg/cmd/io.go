@@ -8,6 +8,7 @@ import (
 	"time"
 
 	cerrors "github.com/drausin/libri/libri/common/errors"
+	"github.com/drausin/libri/libri/common/id"
 	lserver "github.com/drausin/libri/libri/common/logging"
 	"github.com/drausin/libri/libri/common/parse"
 	"github.com/drausin/libri/libri/librarian/api"
@@ -73,18 +74,7 @@ func testIO() error {
 
 	docs := make([]*api.Document, nDocs)
 	for i := 0; i < nDocs; i++ {
-		var value *libriapi.Document
-		if rng.Intn(2) == 0 {
-			value, _ = api.NewTestDocument(rng)
-		} else {
-			value = &libriapi.Document{
-				Contents: &libriapi.Document_Envelope{
-					Envelope: libriapi.NewTestEnvelope(rng),
-				},
-			}
-		}
-		key, err2 := libriapi.GetKey(value)
-		cerrors.MaybePanic(err2)
+		value, key := getDocument(rng)
 		docs[i] = value
 
 		c := courierClients[rng.Int31n(int32(len(courierClients)))]
@@ -125,4 +115,20 @@ func testIO() error {
 		logger.Info("document get succeeded", zap.String(logKey, key.String()))
 	}
 	return nil
+}
+
+func getDocument(rng *rand.Rand) (*libriapi.Document, id.ID) {
+	var value *libriapi.Document
+	if rng.Intn(2) == 0 {
+		value, _ = api.NewTestDocument(rng)
+	} else {
+		value = &libriapi.Document{
+			Contents: &libriapi.Document_Envelope{
+				Envelope: libriapi.NewTestEnvelope(rng),
+			},
+		}
+	}
+	key, err2 := libriapi.GetKey(value)
+	cerrors.MaybePanic(err2)
+	return value, key
 }
