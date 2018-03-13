@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"fmt"
+	"net"
 	"sync"
 	"testing"
 
+	"github.com/drausin/libri/libri/common/errors"
 	"github.com/elxirhealth/courier/pkg/server"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -15,7 +17,8 @@ func TestTestIO(t *testing.T) {
 	nDocs := uint(8)
 
 	// start in-memory courier w/o librarians, so all libri puts will just be queued
-	config := server.NewDefaultConfig()
+	libAddrs := []*net.TCPAddr{{IP: net.ParseIP("localhost"), Port: 20100}}
+	config := server.NewDefaultConfig().WithLibrarianAddrs(libAddrs)
 	config.LibriPutQueueSize = nDocs * 2
 	config.LogLevel = zapcore.DebugLevel
 	config.ServerPort = 10200
@@ -27,7 +30,7 @@ func TestTestIO(t *testing.T) {
 	go func(wg2 *sync.WaitGroup) {
 		defer wg2.Done()
 		err := server.Start(config, up)
-		assert.Nil(t, err)
+		errors.MaybePanic(err)
 	}(wg1)
 
 	c := <-up

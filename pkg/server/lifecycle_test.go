@@ -2,17 +2,33 @@ package server
 
 import (
 	"math/rand"
+	"net"
 	"sync"
 	"testing"
 	"time"
 
+	errors2 "github.com/drausin/libri/libri/common/errors"
 	"github.com/drausin/libri/libri/common/id"
+	"github.com/drausin/libri/libri/common/subscribe"
 	"github.com/drausin/libri/libri/librarian/api"
+	libriapi "github.com/drausin/libri/libri/librarian/api"
+	"github.com/elxirhealth/catalog/pkg/catalogapi"
+	"github.com/elxirhealth/service-base/pkg/util"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
+
+var (
+	okConfig = NewDefaultConfig().
+		WithLibrarianAddrs([]*net.TCPAddr{{IP: net.ParseIP("localhost"), Port: 20100}})
+)
+
+func init() {
+	okConfig.SubscribeTo.NSubscriptions = 0
+}
 
 func TestStart(t *testing.T) {
 	up := make(chan *Courier, 1)
@@ -20,8 +36,8 @@ func TestStart(t *testing.T) {
 	wg1.Add(1)
 	go func(wg2 *sync.WaitGroup) {
 		defer wg2.Done()
-		err := Start(NewDefaultConfig(), up)
-		assert.Nil(t, err)
+		err := Start(okConfig, up)
+		errors2.MaybePanic(err)
 	}(wg1)
 
 	c := <-up
@@ -32,7 +48,7 @@ func TestStart(t *testing.T) {
 }
 
 func TestCourier_startEvictor(t *testing.T) {
-	c, err := newCourier(NewDefaultConfig())
+	c, err := newCourier(okConfig)
 	assert.Nil(t, err)
 	c.config.Cache.EvictionPeriod = 10 * time.Millisecond
 	testCache := &fixedCache{}
@@ -49,7 +65,7 @@ func TestCourier_startEvictor(t *testing.T) {
 
 func TestCourier_startLibriPutter_ok(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
-	c, err := newCourier(NewDefaultConfig())
+	c, err := newCourier(okConfig)
 	assert.Nil(t, err)
 	doc, key := api.NewTestDocument(rng)
 	docBytes, err := proto.Marshal(doc)
@@ -82,13 +98,12 @@ func TestCourier_startLibriPutter_ok(t *testing.T) {
 
 func TestCourier_startLibriPutter_err(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
-	cc := NewDefaultConfig()
 	doc, key := api.NewTestDocument(rng)
 	docBytes, err := proto.Marshal(doc)
 	assert.Nil(t, err)
 
 	// check enough cache get errors should cause it to stop
-	c, err := newCourier(cc)
+	c, err := newCourier(okConfig)
 	assert.Nil(t, err)
 	testPub := &fixedPublisher{}
 	c.cache = &fixedCache{
@@ -104,7 +119,7 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	assert.Equal(t, uint(0), testPub.nPubs)
 
 	// check fatal unmarshal error
-	c, err = newCourier(cc)
+	c, err = newCourier(okConfig)
 	assert.Nil(t, err)
 	c.cache = &fixedCache{value: []byte{1, 2, 3, 4}}
 	c.libriPublisher = &fixedPublisher{}
@@ -117,7 +132,7 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	assert.Equal(t, uint(0), testPub.nPubs)
 
 	// check enough publish errors should cause it to stop
-	c, err = newCourier(cc)
+	c, err = newCourier(okConfig)
 	assert.Nil(t, err)
 	testPub = &fixedPublisher{
 		err: errors.New("some Publish error"),
@@ -130,10 +145,14 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	go c.Serve(func(s *grpc.Server) {}, func() {})
 	c.WaitUntilStarted()
 	c.startLibriPutters()
+	for i := 0; i < libriPutterErrQueueSize; i++ {
+		// check that publish errors put keys back onto the queue
+		<-c.libriPutQueue
+	}
 	assert.Equal(t, uint(0), testPub.nPubs)
 
 	// check enough libri put errors should cause it to stop
-	c, err = newCourier(cc)
+	c, err = newCourier(okConfig)
 	assert.Nil(t, err)
 	c.cache = &fixedCache{value: docBytes}
 	testPub = &fixedPublisher{}
@@ -150,6 +169,68 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	c.startLibriPutters()
 	assert.True(t, testPub.nPubs > 0)
 	assert.Equal(t, uint(0), testAR.nLibriPuts)
+}
+
+func TestCourier_startCatalogPutters_ok(t *testing.T) {
+	rng := rand.New(rand.NewSource(0))
+	c, err := newCourier(okConfig)
+	assert.Nil(t, err)
+
+	catalogClient := &fixedCatalogClient{}
+	c.catalog = catalogClient
+	pub := &libriapi.Publication{
+		EnvelopeKey:     util.RandBytes(rng, 32),
+		EntryKey:        util.RandBytes(rng, 32),
+		AuthorPublicKey: util.RandBytes(rng, 33),
+		ReaderPublicKey: util.RandBytes(rng, 33),
+	}
+	c.catalogPutQueue <- &subscribe.KeyedPub{Value: pub}
+
+	go c.Serve(func(s *grpc.Server) {}, func() {})
+	c.WaitUntilStarted()
+
+	wg1 := new(sync.WaitGroup)
+	wg1.Add(1)
+	go func(wg2 *sync.WaitGroup) {
+		defer wg2.Done()
+		c.startCatalogPutters()
+	}(wg1)
+	time.Sleep(25 * time.Millisecond)
+	c.StopServer()
+
+	wg1.Wait()
+	assert.Equal(t, 1, catalogClient.nPuts)
+}
+
+func TestCourier_startCatalogPutters_err(t *testing.T) {
+	rng := rand.New(rand.NewSource(0))
+	pub := &libriapi.Publication{
+		EnvelopeKey:     util.RandBytes(rng, 32),
+		EntryKey:        util.RandBytes(rng, 32),
+		AuthorPublicKey: util.RandBytes(rng, 33),
+		ReaderPublicKey: util.RandBytes(rng, 33),
+	}
+
+	// check enough catalog put errors should cause it to stop
+	c, err := newCourier(okConfig)
+	assert.Nil(t, err)
+	catalogClient := &fixedCatalogClient{
+		putErr: errors.New("some Put error"),
+	}
+	c.catalog = catalogClient
+	for i := 0; i < catalogPutterErrQueueSize; i++ {
+		c.catalogPutQueue <- &subscribe.KeyedPub{
+			Key:   id.NewPseudoRandom(rng),
+			Value: pub,
+		}
+	}
+	go c.Serve(func(s *grpc.Server) {}, func() {})
+	c.WaitUntilStarted()
+	c.startCatalogPutters()
+	for i := 0; i < catalogPutterErrQueueSize; i++ {
+		// check that publish errors put keys back onto the queue
+		<-c.catalogPutQueue
+	}
 }
 
 type fixedPublisher struct {
@@ -208,4 +289,26 @@ func (r *fixedAccessRecorder) LibriPut(key string) error {
 
 func (r *fixedAccessRecorder) GetNextEvictions() ([]string, error) {
 	return r.nextEvictions, r.getEvictionBatchErr
+}
+
+type fixedCatalogClient struct {
+	putRp  *catalogapi.PutResponse
+	putErr error
+	nPuts  int
+	mu     sync.Mutex
+}
+
+func (f *fixedCatalogClient) Put(
+	ctx context.Context, in *catalogapi.PutRequest, opts ...grpc.CallOption,
+) (*catalogapi.PutResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.nPuts++
+	return f.putRp, f.putErr
+}
+
+func (f *fixedCatalogClient) Search(
+	ctx context.Context, in *catalogapi.SearchRequest, opts ...grpc.CallOption,
+) (*catalogapi.SearchResponse, error) {
+	panic("implement me")
 }

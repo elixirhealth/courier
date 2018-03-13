@@ -14,6 +14,7 @@ import (
 	libriapi "github.com/drausin/libri/libri/librarian/api"
 	"github.com/drausin/libri/libri/librarian/client"
 	"github.com/elxirhealth/catalog/pkg/catalogapi"
+	catalogclient "github.com/elxirhealth/catalog/pkg/client"
 	"github.com/elxirhealth/courier/pkg/cache"
 	api "github.com/elxirhealth/courier/pkg/courierapi"
 	"github.com/elxirhealth/service-base/pkg/server"
@@ -67,6 +68,7 @@ func newCourier(config *Config) (*Courier, error) {
 		return nil, err
 	}
 	rng := rand.New(rand.NewSource(clientID.ID().Int().Int64()))
+
 	clients, err := client.NewDefaultLRUPool()
 	cerrors.MaybePanic(err) // should never happen
 	uniformLibClients, err := client.NewUniformBalancer(config.Librarians, clients, rng)
@@ -74,11 +76,14 @@ func newCourier(config *Config) (*Courier, error) {
 		return nil, err
 	}
 	setLibClients, err := client.NewSetBalancer(config.Librarians, clients, rng)
+	if err != nil {
+		return nil, err
+	}
 	getters := client.NewUniformGetterBalancer(uniformLibClients)
 	putters := client.NewUniformPutterBalancer(uniformLibClients)
 	getter := client.NewRetryGetter(getters, true, config.LibriGetTimeout)
 	putter := client.NewRetryPutter(putters, config.LibriPutTimeout)
-	catalogCC, err := grpc.Dial(config.Catalog.String(), grpc.WithInsecure())
+	catalog, err := catalogclient.NewInsecure(config.Catalog.String())
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +118,7 @@ func newCourier(config *Config) (*Courier, error) {
 		libriPublisher: publisher,
 		libriPutQueue:  make(chan string, config.LibriPutQueueSize),
 
-		catalog:         catalogapi.NewCatalogClient(catalogCC),
+		catalog:         catalog,
 		subscribeTo:     subscribeTo,
 		catalogPutQueue: catalogPutQueue,
 	}, nil
@@ -150,15 +155,44 @@ func (c *Courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 	if err = c.cache.Put(docKey.String(), newDocBytes); err != nil {
 		return nil, err
 	}
+	if err = c.maybePutCatalog(rq.Key, rq.Value); err != nil {
+		return nil, err
+	}
+	if err = c.maybeAddLibriPutQueue(docKey.String()); err != nil {
+		return nil, err
+	}
+	rp := &api.PutResponse{Operation: api.PutOperation_STORED}
+	c.Logger.Info("put document", putDocumentFields(rq, rp)...)
+	return rp, nil
+}
+
+func (c *Courier) maybePutCatalog(key []byte, value *libriapi.Document) error {
+	switch ct := value.Contents.(type) {
+	case *libriapi.Document_Envelope:
+		// create publication receipt for catalog from envelope
+		pr := &catalogapi.PublicationReceipt{
+			EnvelopeKey:     key,
+			EntryKey:        ct.Envelope.EntryKey,
+			AuthorPublicKey: ct.Envelope.AuthorPublicKey,
+			ReaderPublicKey: ct.Envelope.ReaderPublicKey,
+		}
+		if err := c.putCatalog(pr); err != nil {
+			return err
+		}
+	default:
+		// do nothing for Entry or Page
+	}
+	return nil
+}
+
+func (c *Courier) maybeAddLibriPutQueue(key string) error {
 	select {
 	case <-c.BaseServer.Stop:
-		return nil, grpc.ErrServerStopped
-	case c.libriPutQueue <- docKey.String():
-		rp := &api.PutResponse{Operation: api.PutOperation_STORED}
-		c.Logger.Info("put document", putDocumentFields(rq, rp)...)
-		return rp, nil
+		return grpc.ErrServerStopped
+	case c.libriPutQueue <- key:
+		return nil
 	default:
-		return nil, ErrFullLibriPutQueue
+		return ErrFullLibriPutQueue
 	}
 }
 

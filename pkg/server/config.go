@@ -24,11 +24,25 @@ const (
 	// DefaultNLibriPutters is the default number of libri putters.
 	DefaultNLibriPutters = 16
 
+	// DefaultCatalogPutTimeout is the default timeout for catalog Put requests.
 	DefaultCatalogPutTimeout = 1 * time.Second
 
+	// DefaultCatalogPutQueueSize is the default size of the catalog Put queue.
 	DefaultCatalogPutQueueSize = 256
 
+	// DefaultNCatalogPutters is the default number of catalog putters.
 	DefaultNCatalogPutters = 16
+)
+
+var (
+	// DefaultSubscribeToParams are the default subscription.ToParameters used by the courier.
+	DefaultSubscribeToParams = &subscribe.ToParameters{
+		NSubscriptions:  4,
+		FPRate:          1.0,
+		Timeout:         subscribe.DefaultTimeout,
+		MaxErrRate:      subscribe.DefaultMaxErrRate,
+		RecentCacheSize: subscribe.DefaultRecentCacheSize,
+	}
 )
 
 // Config is the config for a Courier instance.
@@ -162,6 +176,12 @@ func (c *Config) WithDefaultNLibriPutters() *Config {
 	return c
 }
 
+// WithCatalogAddr sets the catalog addresses to the given value.
+func (c *Config) WithCatalogAddr(addr *net.TCPAddr) *Config {
+	c.Catalog = addr
+	return c
+}
+
 // WithCatalogPutTimeout sets the catalog Put request timeout to the given value or to the default
 // if it is zero-valued.
 func (c *Config) WithCatalogPutTimeout(t time.Duration) *Config {
@@ -182,7 +202,7 @@ func (c *Config) WithDefaultCatalogPutTimeout() *Config {
 // it is zero-valued.
 func (c *Config) WithCatalogPutQueueSize(s uint) *Config {
 	if s == 0 {
-		return c.WithDefaultLibriPutQueueSize()
+		return c.WithDefaultCatalogPutQueueSize()
 	}
 	c.CatalogPutQueueSize = s
 	return c
@@ -205,7 +225,7 @@ func (c *Config) WithSubscribeTo(p *subscribe.ToParameters) *Config {
 
 // WithDefaultSubscribeTo set the SubscribeTo parameters to their default values.
 func (c *Config) WithDefaultSubscribeTo() *Config {
-	c.SubscribeTo = subscribe.NewDefaultToParameters()
+	c.SubscribeTo = DefaultSubscribeToParams
 	return c
 }
 

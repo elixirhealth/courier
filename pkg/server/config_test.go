@@ -15,8 +15,8 @@ func TestNewDefaultConfig(t *testing.T) {
 	assert.NotEmpty(t, c.LibriGetTimeout)
 	assert.NotEmpty(t, c.LibriPutTimeout)
 	assert.NotEmpty(t, c.LibriPutQueueSize)
-	assert.NotEmpty(t, c.Librarians)
 	assert.NotEmpty(t, c.Cache)
+	assert.NotEmpty(t, c.SubscribeTo)
 }
 
 func TestConfig_WithLibriGetTimeout(t *testing.T) {
@@ -49,7 +49,34 @@ func TestConfig_WithNLibriPutters(t *testing.T) {
 	assert.NotEqual(t, c1.NLibriPutters, c3.WithNLibriPutters(2).NLibriPutters)
 }
 
-// TODO (drausin) add more config tests for catalog stuff
+func TestConfig_WithCatalogAddr(t *testing.T) {
+	c := &Config{}
+	addr, err := net.ResolveTCPAddr("tcp4", "localhost:1234")
+	assert.Nil(t, err)
+	assert.NotNil(t, c.WithCatalogAddr(addr).Catalog)
+}
+
+func TestConfig_WithCatalogPutTimeout(t *testing.T) {
+	c1, c2, c3 := &Config{}, &Config{}, &Config{}
+	c1.WithDefaultCatalogPutTimeout()
+	assert.Equal(t, c1.CatalogPutTimeout, c2.WithCatalogPutTimeout(0).CatalogPutTimeout)
+	assert.NotEqual(t, c1.CatalogPutTimeout,
+		c3.WithCatalogPutTimeout(2*time.Second).CatalogPutTimeout)
+}
+
+func TestConfig_WithCatalogPutQueueSize(t *testing.T) {
+	c1, c2, c3 := &Config{}, &Config{}, &Config{}
+	c1.WithDefaultCatalogPutQueueSize()
+	assert.Equal(t, c1.CatalogPutQueueSize, c2.WithCatalogPutQueueSize(0).CatalogPutQueueSize)
+	assert.NotEqual(t, c1.CatalogPutQueueSize, c3.WithCatalogPutQueueSize(2).CatalogPutQueueSize)
+}
+
+func TestConfig_WithNCatalogPutters(t *testing.T) {
+	c1, c2, c3 := &Config{}, &Config{}, &Config{}
+	c1.WithDefaultNCatalogPutters()
+	assert.Equal(t, c1.NCatalogPutters, c2.WithNCatalogPutters(0).NCatalogPutters)
+	assert.NotEqual(t, c1.NCatalogPutters, c3.WithNCatalogPutters(2).NCatalogPutters)
+}
 
 func TestConfig_WithClientIDFilepath(t *testing.T) {
 	c1 := &Config{}

@@ -19,7 +19,12 @@ import (
 	"github.com/drausin/libri/libri/common/logging"
 	"github.com/drausin/libri/libri/common/parse"
 	"github.com/drausin/libri/libri/librarian/api"
+	libriapi "github.com/drausin/libri/libri/librarian/api"
 	lserver "github.com/drausin/libri/libri/librarian/server"
+	"github.com/elxirhealth/catalog/pkg/catalogapi"
+	catclient "github.com/elxirhealth/catalog/pkg/client"
+	catserver "github.com/elxirhealth/catalog/pkg/server"
+	catstorage "github.com/elxirhealth/catalog/pkg/server/storage"
 	"github.com/elxirhealth/courier/pkg/cache"
 	"github.com/elxirhealth/courier/pkg/courierapi"
 	cserver "github.com/elxirhealth/courier/pkg/server"
@@ -42,6 +47,7 @@ type parameters struct {
 	gcpProjectID    string
 	datastoreAddr   string
 	libriLogLevel   zapcore.Level
+	catalogLogLevel zapcore.Level
 	courierLogLevel zapcore.Level
 }
 
@@ -51,6 +57,9 @@ type state struct {
 	courierClients    []courierapi.CourierClient
 	librarians        []*lserver.Librarian
 	librarianAddrs    []*net.TCPAddr
+	catalog           *catserver.Catalog
+	catalogAddr       *net.TCPAddr
+	catalogClient     catalogapi.CatalogClient
 	datastoreEmulator *os.Process
 	rng               *rand.Rand
 	putDocs           []*api.Document
@@ -66,6 +75,7 @@ func TestAcceptance(t *testing.T) {
 		gcpProjectID:    "dummy-courier-acceptance",
 		datastoreAddr:   "localhost:2001",
 		libriLogLevel:   zapcore.ErrorLevel,
+		catalogLogLevel: zapcore.ErrorLevel,
 		courierLogLevel: zapcore.InfoLevel,
 	}
 	st := setUp(params)
@@ -82,7 +92,18 @@ func TestAcceptance(t *testing.T) {
 func testPut(t *testing.T, params *parameters, st *state) {
 	putDocs := make([]*api.Document, params.nPuts)
 	for c := 0; c < params.nPuts; c++ {
-		value, key := api.NewTestDocument(st.rng)
+		var value *libriapi.Document
+		if st.rng.Intn(2) == 0 {
+			value, _ = api.NewTestDocument(st.rng)
+		} else {
+			value = &libriapi.Document{
+				Contents: &libriapi.Document_Envelope{
+					Envelope: libriapi.NewTestEnvelope(st.rng),
+				},
+			}
+		}
+		key, err := libriapi.GetKey(value)
+
 		putDocs[c] = value
 
 		client := st.courierClients[st.rng.Int31n(int32(len(st.courierClients)))]
@@ -112,14 +133,29 @@ func testGet(t *testing.T, params *parameters, st *state) {
 
 		assert.Nil(t, err)
 		assert.Equal(t, value, rp.Value)
+
+		switch ct := value.Contents.(type) {
+		case *libriapi.Document_Envelope:
+			// check to make sure catalog has envelope pub
+			sRq := &catalogapi.SearchRequest{
+				EntryKey: ct.Envelope.EntryKey,
+				Limit:    1,
+			}
+			ctx, cancel = context.WithTimeout(context.Background(), params.getTimeout)
+			sRp, err2 := st.catalogClient.Search(ctx, sRq)
+			cancel()
+			assert.Nil(t, err2)
+			assert.Equal(t, 1, len(sRp.Result))
+		}
 	}
 }
 
 func setUp(params *parameters) *state {
 	st := &state{rng: rand.New(rand.NewSource(0))}
 
-	createAndStartLibrarians(params, st)
 	startDatastoreEmulator(params, st)
+	createAndStartLibrarians(params, st)
+	createAndStartCatalog(params, st)
 	createAndStartCouriers(params, st)
 
 	return st
@@ -196,7 +232,7 @@ func startDatastoreEmulator(params *parameters, st *state) {
 }
 
 func createAndStartCouriers(params *parameters, st *state) {
-	configs, addrs := newCourierConfigs(st.librarianAddrs, params)
+	configs, addrs := newCourierConfigs(st.librarianAddrs, st.catalogAddr, params)
 	couriers := make([]*cserver.Courier, params.nCouriers)
 	courierClients := make([]courierapi.CourierClient, params.nCouriers)
 	up := make(chan *cserver.Courier, 1)
@@ -210,7 +246,7 @@ func createAndStartCouriers(params *parameters, st *state) {
 		// wait for courier to come up
 		couriers[i] = <-up
 
-		// set up client to it
+		// set up catclient to it
 		conn, err := grpc.Dial(addrs[i].String(), grpc.WithInsecure())
 		errors.MaybePanic(err)
 		courierClients[i] = courierapi.NewCourierClient(conn)
@@ -220,7 +256,7 @@ func createAndStartCouriers(params *parameters, st *state) {
 	st.courierClients = courierClients
 }
 
-func newCourierConfigs(librarianAddrs []*net.TCPAddr, params *parameters) (
+func newCourierConfigs(libAddrs []*net.TCPAddr, catalogAddr *net.TCPAddr, params *parameters) (
 	[]*cserver.Config, []*net.TCPAddr) {
 	startPort := 10100
 	configs := make([]*cserver.Config, params.nCouriers)
@@ -238,7 +274,8 @@ func newCourierConfigs(librarianAddrs []*net.TCPAddr, params *parameters) (
 	for i := 0; i < params.nCouriers; i++ {
 		serverPort, metricsPort := startPort+i*10, startPort+i*10+1
 		configs[i] = cserver.NewDefaultConfig().
-			WithLibrarianAddrs(librarianAddrs).
+			WithLibrarianAddrs(libAddrs).
+			WithCatalogAddr(catalogAddr).
 			WithCache(cacheParams).
 			WithGCPProjectID(params.gcpProjectID)
 		configs[i].WithServerPort(uint(serverPort)).
@@ -247,6 +284,38 @@ func newCourierConfigs(librarianAddrs []*net.TCPAddr, params *parameters) (
 		addrs[i] = &net.TCPAddr{IP: net.ParseIP("localhost"), Port: serverPort}
 	}
 	return configs, addrs
+}
+
+func createAndStartCatalog(params *parameters, st *state) {
+	config, addr := newCatalogConfig(params)
+	up := make(chan *catserver.Catalog, 1)
+
+	go func() {
+		err := catserver.Start(config, up)
+		errors.MaybePanic(err)
+	}()
+
+	// wait for catalog to come up
+	st.catalog = <-up
+	st.catalogAddr = addr
+	cl, err := catclient.NewInsecure(addr.String())
+	errors.MaybePanic(err)
+	st.catalogClient = cl
+}
+
+func newCatalogConfig(params *parameters) (*catserver.Config, *net.TCPAddr) {
+	startPort := 10200
+	storageParams := catstorage.NewDefaultParameters()
+	storageParams.Type = bstorage.DataStore
+	serverPort, metricsPort := startPort, startPort+1
+	config := catserver.NewDefaultConfig().
+		WithStorage(storageParams).
+		WithGCPProjectID(params.gcpProjectID)
+	config.WithServerPort(uint(serverPort)).
+		WithMetricsPort(uint(metricsPort)).
+		WithLogLevel(params.catalogLogLevel)
+	addr := &net.TCPAddr{IP: net.ParseIP("localhost"), Port: int(serverPort)}
+	return config, addr
 }
 
 func tearDown(st *state) {
@@ -262,6 +331,9 @@ func tearDown(st *state) {
 	err = syscall.Kill(-pgid, syscall.SIGKILL)
 	errors.MaybePanic(err)
 
+	// stop catalog
+	st.catalog.StopServer()
+
 	// stop librarians
 	for _, p1 := range st.librarians {
 		go func(p2 *lserver.Librarian) {
@@ -269,8 +341,8 @@ func tearDown(st *state) {
 			// don't crash b/c of flurry of ended subscriptions from earlier librarians
 			p2.StopAuxRoutines()
 			time.Sleep(5 * time.Second)
-			err := p2.Close()
-			errors.MaybePanic(err)
+			err2 := p2.Close()
+			errors.MaybePanic(err2)
 		}(p1)
 	}
 
