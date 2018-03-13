@@ -5,8 +5,9 @@ set -eou pipefail
 
 docker_cleanup() {
     echo "cleaning up existing network and containers..."
-    docker ps | grep -E 'libri|courier' | awk '{print $1}' | xargs -I {} docker stop {} || true
-    docker ps -a | grep -E 'libri|courier' | awk '{print $1}' | xargs -I {} docker rm {} || true
+    CONTAINERS='libri|courier|catalog'
+    docker ps | grep -E ${CONTAINERS} | awk '{print $1}' | xargs -I {} docker stop {} || true
+    docker ps -a | grep -E ${CONTAINERS} | awk '{print $1}' | xargs -I {} docker rm {} || true
     docker network list | grep 'courier' | awk '{print $2}' | xargs -I {} docker network rm {} || true
 }
 

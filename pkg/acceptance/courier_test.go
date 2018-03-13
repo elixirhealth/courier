@@ -103,6 +103,7 @@ func testPut(t *testing.T, params *parameters, st *state) {
 			}
 		}
 		key, err := libriapi.GetKey(value)
+		assert.Nil(t, err)
 
 		putDocs[c] = value
 

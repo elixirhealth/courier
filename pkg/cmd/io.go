@@ -11,6 +11,7 @@ import (
 	lserver "github.com/drausin/libri/libri/common/logging"
 	"github.com/drausin/libri/libri/common/parse"
 	"github.com/drausin/libri/libri/librarian/api"
+	libriapi "github.com/drausin/libri/libri/librarian/api"
 	"github.com/elxirhealth/courier/pkg/courierapi"
 	server2 "github.com/elxirhealth/service-base/pkg/server"
 	"github.com/pkg/errors"
@@ -72,7 +73,18 @@ func testIO() error {
 
 	docs := make([]*api.Document, nDocs)
 	for i := 0; i < nDocs; i++ {
-		value, key := api.NewTestDocument(rng)
+		var value *libriapi.Document
+		if rng.Intn(2) == 0 {
+			value, _ = api.NewTestDocument(rng)
+		} else {
+			value = &libriapi.Document{
+				Contents: &libriapi.Document_Envelope{
+					Envelope: libriapi.NewTestEnvelope(rng),
+				},
+			}
+		}
+		key, err2 := libriapi.GetKey(value)
+		cerrors.MaybePanic(err2)
 		docs[i] = value
 
 		c := courierClients[rng.Int31n(int32(len(courierClients)))]
@@ -81,8 +93,8 @@ func testIO() error {
 		rp, err2 := c.Put(ctx, rq)
 		cancel()
 		if err2 != nil {
-			logger.Error("document put failed", zap.Error(err))
-			continue
+			logger.Error("document put failed", zap.Error(err2))
+			return err2
 		}
 		logger.Info("document put succeeded",
 			zap.String(logKey, key.String()),
@@ -103,7 +115,7 @@ func testIO() error {
 		cancel()
 		if err2 != nil {
 			logger.Error("document get failed", zap.Error(err2))
-			continue
+			return err2
 		}
 		if !reflect.DeepEqual(docs[i], rp.Value) {
 			log.Printf("expected: %v\n", docs[i])
