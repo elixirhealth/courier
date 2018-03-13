@@ -19,17 +19,16 @@ import (
 )
 
 func TestNewCourier_ok(t *testing.T) {
-	config := NewDefaultConfig()
-	c, err := newCourier(config)
+	c, err := newCourier(okConfig)
 	assert.Nil(t, err)
 	assert.NotNil(t, c.clientID)
 	assert.NotNil(t, c.cache)
-	assert.NotNil(t, c.getter)
-	assert.NotNil(t, c.putter)
-	assert.NotNil(t, c.acquirer)
-	assert.NotNil(t, c.publisher)
+	assert.NotNil(t, c.libriGetter)
+	assert.NotNil(t, c.libriPutter)
+	assert.NotNil(t, c.libriAcquirer)
+	assert.NotNil(t, c.libriPublisher)
 	assert.NotNil(t, c.libriPutQueue)
-	assert.Equal(t, config, c.config)
+	assert.Equal(t, okConfig, c.config)
 }
 
 func TestNewCourier_err(t *testing.T) {
@@ -49,7 +48,14 @@ func TestNewCourier_err(t *testing.T) {
 
 func TestCourier_Put_ok(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
-	value, key := libriapi.NewTestDocument(rng)
+	value := &libriapi.Document{
+		Contents: &libriapi.Document_Envelope{
+			Envelope: libriapi.NewTestEnvelope(rng),
+		},
+	}
+	key, err := libriapi.GetKey(value)
+	assert.Nil(t, err)
+
 	valueBytes, err := proto.Marshal(value)
 	assert.Nil(t, err)
 	rq := &api.PutRequest{
@@ -61,7 +67,9 @@ func TestCourier_Put_ok(t *testing.T) {
 	cc := &fixedCache{value: valueBytes}
 	c := &Courier{
 		BaseServer:    server.NewBaseServer(server.NewDefaultBaseConfig()),
+		config:        NewDefaultConfig(),
 		cache:         cc,
+		catalog:       &fixedCatalogClient{},
 		libriPutQueue: make(chan string, 1),
 	}
 	rp, err := c.Put(context.Background(), rq)
@@ -72,9 +80,12 @@ func TestCourier_Put_ok(t *testing.T) {
 	// when Cache doesn't have value, Put request should store in Cache and add
 	// to libriPutQueue queue
 	cc = &fixedCache{getErr: cache.ErrMissingValue}
+	catalog := &fixedCatalogClient{}
 	c = &Courier{
 		BaseServer:    server.NewBaseServer(server.NewDefaultBaseConfig()),
+		config:        NewDefaultConfig(),
 		cache:         cc,
+		catalog:       catalog,
 		libriPutQueue: make(chan string, 1),
 	}
 	rp, err = c.Put(context.Background(), rq)
@@ -83,6 +94,7 @@ func TestCourier_Put_ok(t *testing.T) {
 	assert.Equal(t, key.String(), cc.getKey)
 	assert.Equal(t, key.String(), cc.putKey)
 	assert.Equal(t, valueBytes, cc.value)
+	assert.Equal(t, 1, catalog.nPuts)
 	toPutKey := <-c.libriPutQueue
 	assert.Equal(t, key.String(), toPutKey)
 }
@@ -176,9 +188,9 @@ func TestCourier_Get_ok(t *testing.T) {
 	cc = &fixedCache{getErr: cache.ErrMissingValue}
 	acq := &fixedAcquirer{doc: value}
 	c = &Courier{
-		BaseServer: server.NewBaseServer(server.NewDefaultBaseConfig()),
-		cache:      cc,
-		acquirer:   acq,
+		BaseServer:    server.NewBaseServer(server.NewDefaultBaseConfig()),
+		cache:         cc,
+		libriAcquirer: acq,
 	}
 	rp, err = c.Get(context.Background(), rq)
 	assert.Nil(t, err)
@@ -216,18 +228,18 @@ func TestCourier_Get_err(t *testing.T) {
 				cache: &fixedCache{value: []byte{1, 2, 3, 4}},
 			},
 		},
-		"acquirer Acquire error": {
+		"libriAcquirer Acquire error": {
 			rq: okRq,
 			c: &Courier{
-				cache:    &fixedCache{getErr: cache.ErrMissingValue},
-				acquirer: &fixedAcquirer{err: errors.New("some Acquire error")},
+				cache:         &fixedCache{getErr: cache.ErrMissingValue},
+				libriAcquirer: &fixedAcquirer{err: errors.New("some Acquire error")},
 			},
 		},
-		"acquirer Acquire missing doc": {
+		"libriAcquirer Acquire missing doc": {
 			rq: okRq,
 			c: &Courier{
-				cache:    &fixedCache{getErr: cache.ErrMissingValue},
-				acquirer: &fixedAcquirer{err: libriapi.ErrMissingDocument},
+				cache:         &fixedCache{getErr: cache.ErrMissingValue},
+				libriAcquirer: &fixedAcquirer{err: libriapi.ErrMissingDocument},
 			},
 		},
 		"Cache Put error": {
@@ -237,7 +249,7 @@ func TestCourier_Get_err(t *testing.T) {
 					getErr: cache.ErrMissingValue,
 					putErr: errors.New("some Put error"),
 				},
-				acquirer: &fixedAcquirer{doc: value},
+				libriAcquirer: &fixedAcquirer{doc: value},
 			},
 		},
 	}

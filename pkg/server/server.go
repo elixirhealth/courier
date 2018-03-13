@@ -10,8 +10,11 @@ import (
 	"github.com/drausin/libri/libri/common/ecid"
 	cerrors "github.com/drausin/libri/libri/common/errors"
 	"github.com/drausin/libri/libri/common/id"
+	"github.com/drausin/libri/libri/common/subscribe"
 	libriapi "github.com/drausin/libri/libri/librarian/api"
 	"github.com/drausin/libri/libri/librarian/client"
+	"github.com/elxirhealth/catalog/pkg/catalogapi"
+	catalogclient "github.com/elxirhealth/catalog/pkg/client"
 	"github.com/elxirhealth/courier/pkg/cache"
 	api "github.com/elxirhealth/courier/pkg/courierapi"
 	"github.com/elxirhealth/service-base/pkg/server"
@@ -31,21 +34,28 @@ var (
 
 	// ErrFullLibriPutQueue indicates when the libri put queue is full.
 	ErrFullLibriPutQueue = errors.New("full libri Put queue")
+
+	errMissingCatalog = errors.New("missing catalog address")
 )
 
 // Courier implements the CourierServer interface.
 type Courier struct {
 	*server.BaseServer
+	config *Config
 
 	clientID       ecid.ID
 	cache          cache.Cache
 	accessRecorder cache.AccessRecorder
-	getter         libriapi.Getter
-	putter         libriapi.Putter
-	acquirer       publish.Acquirer
-	publisher      publish.Publisher
+
+	libriGetter    libriapi.Getter
+	libriPutter    libriapi.Putter
+	libriAcquirer  publish.Acquirer
+	libriPublisher publish.Publisher
 	libriPutQueue  chan string
-	config         *Config
+
+	catalog         catalogapi.CatalogClient
+	subscribeTo     subscribe.To
+	catalogPutQueue chan *subscribe.KeyedPub
 }
 
 // newCourier creates a new CourierServer from the given config.
@@ -60,42 +70,68 @@ func newCourier(config *Config) (*Courier, error) {
 		return nil, err
 	}
 	rng := rand.New(rand.NewSource(clientID.ID().Int().Int64()))
+
 	clients, err := client.NewDefaultLRUPool()
+	cerrors.MaybePanic(err) // should never happen
+	uniformLibClients, err := client.NewUniformBalancer(config.Librarians, clients, rng)
 	if err != nil {
 		return nil, err
 	}
-	librarians, err := client.NewUniformBalancer(config.Librarians, clients, rng)
+	setLibClients, err := client.NewSetBalancer(config.Librarians, clients, rng)
 	if err != nil {
 		return nil, err
 	}
-	getters := client.NewUniformGetterBalancer(librarians)
-	putters := client.NewUniformPutterBalancer(librarians)
+	getters := client.NewUniformGetterBalancer(uniformLibClients)
+	putters := client.NewUniformPutterBalancer(uniformLibClients)
 	getter := client.NewRetryGetter(getters, true, config.LibriGetTimeout)
 	putter := client.NewRetryPutter(putters, config.LibriPutTimeout)
+	if config.Catalog == nil {
+		return nil, errMissingCatalog
+	}
+	catalog, err := catalogclient.NewInsecure(config.Catalog.String())
+	if err != nil {
+		return nil, err
+	}
+
+	signer := client.NewSigner(clientID.Key())
+	catalogPutQueue := make(chan *subscribe.KeyedPub, config.CatalogPutQueueSize)
+	recentPubs, err := subscribe.NewRecentPublications(config.SubscribeTo.RecentCacheSize)
+	subscribeTo := subscribe.NewTo(config.SubscribeTo, baseServer.Logger, clientID,
+		setLibClients, signer, recentPubs, catalogPutQueue)
 
 	pubParams := &publish.Parameters{
 		PutTimeout: config.LibriPutTimeout,
 		GetTimeout: config.LibriGetTimeout,
 	}
-	acquirer := publish.NewAcquirer(clientID, client.NewSigner(clientID.Key()), pubParams)
-	publisher := publish.NewPublisher(clientID, client.NewSigner(clientID.Key()), pubParams)
+	acquirer := publish.NewAcquirer(clientID, signer, pubParams)
+	publisher := publish.NewPublisher(clientID, signer, pubParams)
+
+	if err != nil {
+		return nil, err
+	}
 	return &Courier{
-		BaseServer:     baseServer,
+		BaseServer: baseServer,
+		config:     config,
+
 		clientID:       clientID,
 		cache:          c,
 		accessRecorder: ar,
-		getter:         getter,
-		putter:         putter,
-		acquirer:       acquirer,
-		publisher:      publisher,
+
+		libriGetter:    getter,
+		libriPutter:    putter,
+		libriAcquirer:  acquirer,
+		libriPublisher: publisher,
 		libriPutQueue:  make(chan string, config.LibriPutQueueSize),
-		config:         config,
+
+		catalog:         catalog,
+		subscribeTo:     subscribeTo,
+		catalogPutQueue: catalogPutQueue,
 	}, nil
 }
 
 // Put puts a value into the Cache and libri network.
 func (c *Courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse, error) {
-	c.Logger.Debug("received put request", zap.String(logKey, id.Hex(rq.Key)))
+	c.Logger.Debug("received Put request", zap.String(logKey, id.Hex(rq.Key)))
 	if err := api.ValidatePutRequest(rq); err != nil {
 		return nil, err
 	}
@@ -124,21 +160,50 @@ func (c *Courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 	if err = c.cache.Put(docKey.String(), newDocBytes); err != nil {
 		return nil, err
 	}
+	if err = c.maybePutCatalog(rq.Key, rq.Value); err != nil {
+		return nil, err
+	}
+	if err = c.maybeAddLibriPutQueue(docKey.String()); err != nil {
+		return nil, err
+	}
+	rp := &api.PutResponse{Operation: api.PutOperation_STORED}
+	c.Logger.Info("put document", putDocumentFields(rq, rp)...)
+	return rp, nil
+}
+
+func (c *Courier) maybePutCatalog(key []byte, value *libriapi.Document) error {
+	switch ct := value.Contents.(type) {
+	case *libriapi.Document_Envelope:
+		// create publication receipt for catalog from envelope
+		pr := &catalogapi.PublicationReceipt{
+			EnvelopeKey:     key,
+			EntryKey:        ct.Envelope.EntryKey,
+			AuthorPublicKey: ct.Envelope.AuthorPublicKey,
+			ReaderPublicKey: ct.Envelope.ReaderPublicKey,
+		}
+		if err := c.putCatalog(pr); err != nil {
+			return err
+		}
+	default:
+		// do nothing for Entry or Page
+	}
+	return nil
+}
+
+func (c *Courier) maybeAddLibriPutQueue(key string) error {
 	select {
 	case <-c.BaseServer.Stop:
-		return nil, grpc.ErrServerStopped
-	case c.libriPutQueue <- docKey.String():
-		rp := &api.PutResponse{Operation: api.PutOperation_STORED}
-		c.Logger.Info("put document", putDocumentFields(rq, rp)...)
-		return rp, nil
+		return grpc.ErrServerStopped
+	case c.libriPutQueue <- key:
+		return nil
 	default:
-		return nil, ErrFullLibriPutQueue
+		return ErrFullLibriPutQueue
 	}
 }
 
 // Get retrieves a value from the Cache or libri network, if it exists.
 func (c *Courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse, error) {
-	c.Logger.Debug("received get request", zap.String(logKey, id.Hex(rq.Key)))
+	c.Logger.Debug("received Get request", zap.String(logKey, id.Hex(rq.Key)))
 	if err := api.ValidateGetRequest(rq); err != nil {
 		return nil, err
 	}
@@ -160,7 +225,7 @@ func (c *Courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse
 	}
 
 	// Cache doesn't have value, so try to get it from libri
-	doc, err := c.acquirer.Acquire(docKey, nil, c.getter)
+	doc, err := c.libriAcquirer.Acquire(docKey, nil, c.libriGetter)
 	if err != nil && err != libriapi.ErrMissingDocument {
 		return nil, err
 	}

@@ -3,7 +3,7 @@ syntax = "proto3";
 package courierapi;
 
 
-// Use vendored libridocuments.proto definitions directly. This compiles fine when the vendor/
+// Use vendored libri documents.proto definitions directly. This compiles fine when the vendor/
 // dir is included in the protoc command, but GoLand doesn't know about that dir and so can't find
 // the Document message type definitions. During development, you can eliminate these errors by
 // directly importing via

@@ -1,13 +1,16 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"math/big"
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	cerrors "github.com/drausin/libri/libri/common/errors"
 	libriapi "github.com/drausin/libri/libri/librarian/api"
+	"github.com/elxirhealth/catalog/pkg/catalogapi"
 	api "github.com/elxirhealth/courier/pkg/courierapi"
 	"github.com/elxirhealth/service-base/pkg/server"
 	"github.com/golang/protobuf/proto"
@@ -16,10 +19,12 @@ import (
 )
 
 const (
-	evictorErrQueueSize     = 4
-	evictorMaxErrRate       = 0.75
-	libriPutterErrQueueSize = 24
-	libriPutterMaxErrRate   = 1.0 / 3 // 3 different errors statements return an error
+	evictorErrQueueSize       = 4
+	evictorMaxErrRate         = 0.75
+	libriPutterErrQueueSize   = 24
+	libriPutterMaxErrRate     = 1.0 / 3 // 3 different errors statements return an error
+	catalogPutterErrQueueSize = 4
+	catalogPutterMaxErrRate   = 0.75
 )
 
 // Start starts the server and eviction routines.
@@ -31,10 +36,18 @@ func Start(config *Config, up chan *Courier) error {
 
 	// start Courier aux routines
 	go c.startEvictor()
-	go c.startLibriPutter()
+	go c.startLibriPutters()
+	go c.startCatalogPutters()
+	go c.startPublicationReceiver()
 
 	registerServer := func(s *grpc.Server) { api.RegisterCourierServer(s, c) }
 	return c.Serve(registerServer, func() { up <- c })
+}
+
+// StopServer stops auxiliary routines and the server.
+func (c *Courier) StopServer() {
+	c.subscribeTo.End()
+	c.BaseServer.StopServer()
 }
 
 func (c *Courier) startEvictor() {
@@ -76,20 +89,23 @@ func (c *Courier) startEvictor() {
 	}
 }
 
-func (c *Courier) startLibriPutter() {
+func (c *Courier) startLibriPutters() {
 	// monitor non-fatal errors, sending fatal err if too many
+	chMu := new(sync.Mutex)
 	errs := make(chan error, 2*c.config.NLibriPutters)  // non-fatal errs and nils
 	fatal := make(chan error, 2*c.config.NLibriPutters) // signals fatal end
 	go cerrors.MonitorRunningErrors(errs, fatal, libriPutterErrQueueSize, libriPutterMaxErrRate,
 		c.Logger)
 	go func() {
 		err := <-fatal
-		c.Logger.Error("fatal libri putter error", zap.Error(err))
+		c.Logger.Error("fatal libri libriPutter error", zap.Error(err))
 		c.StopServer()
 	}()
 	go func() {
 		<-c.BaseServer.Stop
+		chMu.Lock()
 		close(c.libriPutQueue)
+		chMu.Unlock()
 	}()
 
 	wg1 := new(sync.WaitGroup)
@@ -116,10 +132,16 @@ func (c *Courier) startLibriPutter() {
 					return
 				}
 
-				docKey, err := c.publisher.Publish(doc, libriapi.GetAuthorPub(doc),
-					c.putter)
+				docKey, err := c.libriPublisher.Publish(doc,
+					libriapi.GetAuthorPub(doc), c.libriPutter)
 				msg = "error publishing document to libri"
 				if ok := c.handleRunningErr(err, errs, msg, key); !ok {
+					// add back onto queue so we don't drop it
+					if c.BaseServer.State() < server.Stopping {
+						chMu.Lock()
+						c.libriPutQueue <- key
+						chMu.Unlock()
+					}
 					continue
 				}
 
@@ -136,6 +158,82 @@ func (c *Courier) startLibriPutter() {
 		}(wg1, i)
 	}
 	wg1.Wait()
+}
+
+func (c *Courier) startPublicationReceiver() {
+	if err := c.subscribeTo.Begin(); err != nil {
+		c.Logger.Error("fatal subscribeTo error", zap.Error(err))
+		c.StopServer()
+	}
+}
+
+func (c *Courier) startCatalogPutters() {
+	// monitor non-fatal errors, sending fatal err if too many
+	errs := make(chan error, 2*c.config.NCatalogPutters)  // non-fatal errs and nils
+	fatal := make(chan error, 2*c.config.NCatalogPutters) // signals fatal end
+	go cerrors.MonitorRunningErrors(errs, fatal, catalogPutterErrQueueSize,
+		catalogPutterMaxErrRate, c.Logger)
+	go func() {
+		err := <-fatal
+		c.Logger.Error("fatal subscribeTo error", zap.Error(err))
+		c.StopServer()
+	}()
+	go func() {
+		<-c.BaseServer.Stop
+		select {
+		case <-c.catalogPutQueue: // already closed
+		default:
+			close(c.catalogPutQueue)
+		}
+	}()
+
+	wg1 := new(sync.WaitGroup)
+	for i := uint(0); i < c.config.NLibriPutters; i++ {
+		wg1.Add(1)
+		go func(wg2 *sync.WaitGroup, j uint) {
+			defer wg2.Done()
+			for kp := range c.catalogPutQueue {
+				pub := kp.Value
+				if c.BaseServer.State() >= server.Stopping {
+					return
+				}
+				err := c.putCatalog(&catalogapi.PublicationReceipt{
+					EnvelopeKey:     pub.EnvelopeKey,
+					EntryKey:        pub.EntryKey,
+					AuthorPublicKey: pub.AuthorPublicKey,
+					ReaderPublicKey: pub.ReaderPublicKey,
+				})
+				if err != nil {
+					// add back onto queue so we don't drop it
+					if c.BaseServer.State() < server.Stopping {
+						c.catalogPutQueue <- kp
+					}
+				}
+				errs <- err
+			}
+		}(wg1, i)
+	}
+	wg1.Wait()
+}
+
+func (c *Courier) putCatalog(pr *catalogapi.PublicationReceipt) error {
+	pr.ReceivedTime = time.Now().UnixNano() / 1E3
+	rq := &catalogapi.PutRequest{Value: pr}
+	bo := newTimeoutExpBackoff(c.config.CatalogPutTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(),
+		c.config.CatalogPutTimeout)
+	defer cancel()
+	op := func() error {
+		_, err := c.catalog.Put(ctx, rq)
+		return err
+	}
+	return backoff.Retry(op, bo)
+}
+
+func newTimeoutExpBackoff(timeout time.Duration) backoff.BackOff {
+	bo := backoff.NewExponentialBackOff()
+	bo.MaxElapsedTime = timeout
+	return bo
 }
 
 func (c *Courier) handleRunningErr(err error, errs chan error, logMsg string, key string) bool {

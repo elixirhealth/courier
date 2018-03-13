@@ -75,6 +75,7 @@ type Parameters struct {
 	LRUCacheSize         uint
 	EvictionBatchSize    uint
 	EvictionPeriod       time.Duration
+	GetQueryTimeout      time.Duration
 	EvictionQueryTimeout time.Duration
 	GetTimeout           time.Duration
 	PutTimeout           time.Duration

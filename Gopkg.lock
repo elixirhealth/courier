@@ -85,6 +85,12 @@
 
 [[projects]]
   branch = "develop"
+  name = "github.com/elxirhealth/catalog"
+  packages = ["pkg/catalogapi"]
+  revision = "0bd71dd06e4d0fa20be9b935006fbd9a11aa0f78"
+
+[[projects]]
+  branch = "develop"
   name = "github.com/elxirhealth/service-base"
   packages = [
     "pkg/server",
@@ -515,6 +521,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "e800802e81e26cffb90e3122a89348f0842819d38568fc81895f91bfdd370a67"
+  inputs-digest = "2bf888b3e00a04aa5b9c521480666c69237d475ad41a585e5da2848c58b48bbb"
   solver-name = "gps-cdcl"
   solver-version = 1
