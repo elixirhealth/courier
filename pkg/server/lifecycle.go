@@ -137,11 +137,11 @@ func (c *Courier) startLibriPutters() {
 				msg = "error publishing document to libri"
 				if ok := c.handleRunningErr(err, errs, msg, key); !ok {
 					// add back onto queue so we don't drop it
+					chMu.Lock()
 					if c.BaseServer.State() < server.Stopping {
-						chMu.Lock()
 						c.libriPutQueue <- key
-						chMu.Unlock()
 					}
+					chMu.Unlock()
 					continue
 				}
 
