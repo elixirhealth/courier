@@ -87,7 +87,7 @@
   branch = "develop"
   name = "github.com/elxirhealth/catalog"
   packages = ["pkg/catalogapi"]
-  revision = "0bd71dd06e4d0fa20be9b935006fbd9a11aa0f78"
+  revision = "91a09b55f540b87ea1720bc483a9a4ca993f4d87"
 
 [[projects]]
   branch = "develop"
