@@ -202,6 +202,8 @@ func (c *Courier) startCatalogPutters() {
 					EntryKey:        pub.EntryKey,
 					AuthorPublicKey: pub.AuthorPublicKey,
 					ReaderPublicKey: pub.ReaderPublicKey,
+					// TODO (drausin) get author and reader entity IDs from key
+					// service
 				})
 				if err != nil {
 					// add back onto queue so we don't drop it
