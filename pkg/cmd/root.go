@@ -25,7 +25,7 @@ func init() {
 	// bind viper flags
 	viper.SetEnvPrefix(envVarPrefix) // look for env vars with "COURIER_" prefix
 	viper.AutomaticEnv()             // read in environment variables that match
-	errors.MaybePanic(viper.BindPFlags(rootCmd.Flags()))
+	errors.MaybePanic(viper.BindPFlags(rootCmd.PersistentFlags()))
 }
 
 // Execute runs the root courier command.
