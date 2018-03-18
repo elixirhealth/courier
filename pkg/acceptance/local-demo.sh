@@ -89,7 +89,7 @@ docker run --rm --net=courier ${CATALOG_IMAGE} test health \
 
 echo
 echo "starting key..."
-port=10100
+port=10200
 name="key-0"
 docker run --name "${name}" --net=courier -d -p ${port}:${port} ${KEY_IMAGE} \
     start \
@@ -106,7 +106,7 @@ docker run --rm --net=courier ${KEY_IMAGE} test health \
 
 echo
 echo "starting courier..."
-port=10200
+port=10300
 name="courier-0"
 docker run --name "${name}" --net=courier -d -p ${port}:${port} ${COURIER_IMAGE} \
     start \
