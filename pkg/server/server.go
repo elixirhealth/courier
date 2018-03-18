@@ -17,6 +17,8 @@ import (
 	catalogclient "github.com/elxirhealth/catalog/pkg/client"
 	"github.com/elxirhealth/courier/pkg/cache"
 	api "github.com/elxirhealth/courier/pkg/courierapi"
+	keyclient "github.com/elxirhealth/key/pkg/client"
+	"github.com/elxirhealth/key/pkg/keyapi"
 	"github.com/elxirhealth/service-base/pkg/server"
 	"github.com/golang/protobuf/proto"
 	"go.uber.org/zap"
@@ -36,6 +38,7 @@ var (
 	ErrFullLibriPutQueue = errors.New("full libri Put queue")
 
 	errMissingCatalog = errors.New("missing catalog address")
+	errMissingKey     = errors.New("missing key address")
 )
 
 // Courier implements the CourierServer interface.
@@ -56,6 +59,8 @@ type Courier struct {
 	catalog         catalogapi.CatalogClient
 	subscribeTo     subscribe.To
 	catalogPutQueue chan *subscribe.KeyedPub
+
+	key keyapi.KeyClient
 }
 
 // newCourier creates a new CourierServer from the given config.
@@ -89,6 +94,13 @@ func newCourier(config *Config) (*Courier, error) {
 		return nil, errMissingCatalog
 	}
 	catalog, err := catalogclient.NewInsecure(config.Catalog.String())
+	if err != nil {
+		return nil, err
+	}
+	if config.Key == nil {
+		return nil, errMissingKey
+	}
+	key, err := keyclient.NewInsecure(config.Key.String())
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +138,8 @@ func newCourier(config *Config) (*Courier, error) {
 		catalog:         catalog,
 		subscribeTo:     subscribeTo,
 		catalogPutQueue: catalogPutQueue,
+
+		key: key,
 	}, nil
 }
 

@@ -86,8 +86,24 @@
 [[projects]]
   branch = "develop"
   name = "github.com/elxirhealth/catalog"
-  packages = ["pkg/catalogapi"]
+  packages = [
+    "pkg/catalogapi",
+    "pkg/client",
+    "pkg/server",
+    "pkg/server/storage"
+  ]
   revision = "91a09b55f540b87ea1720bc483a9a4ca993f4d87"
+
+[[projects]]
+  branch = "develop"
+  name = "github.com/elxirhealth/key"
+  packages = [
+    "pkg/client",
+    "pkg/keyapi",
+    "pkg/server",
+    "pkg/server/storage"
+  ]
+  revision = "a5fe42acfdb0003fc7a1e83fb6bf66e315d77790"
 
 [[projects]]
   branch = "develop"
@@ -98,7 +114,7 @@
     "pkg/util",
     "pkg/version"
   ]
-  revision = "6659a9524052cf3893625d6d01386709cb2d141d"
+  revision = "4db3ff36815e2ea5caccc03f35bb6dfe5dea9fcb"
 
 [[projects]]
   name = "github.com/ethereum/go-ethereum"
@@ -521,6 +537,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "2bf888b3e00a04aa5b9c521480666c69237d475ad41a585e5da2848c58b48bbb"
+  inputs-digest = "c48805093a9d76e7486466f0e6657f20b0cb980630a88dab0dbbfad86905a508"
   solver-name = "gps-cdcl"
   solver-version = 1

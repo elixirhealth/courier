@@ -4,6 +4,7 @@ package acceptance
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"net"
@@ -28,7 +29,12 @@ import (
 	"github.com/elxirhealth/courier/pkg/cache"
 	"github.com/elxirhealth/courier/pkg/courierapi"
 	cserver "github.com/elxirhealth/courier/pkg/server"
+	keyclient "github.com/elxirhealth/key/pkg/client"
+	"github.com/elxirhealth/key/pkg/keyapi"
+	keyserver "github.com/elxirhealth/key/pkg/server"
+	keystorage "github.com/elxirhealth/key/pkg/server/storage"
 	bstorage "github.com/elxirhealth/service-base/pkg/server/storage"
+	"github.com/elxirhealth/service-base/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
@@ -42,12 +48,15 @@ type parameters struct {
 	nLibrarians     int
 	nCouriers       int
 	nPuts           int
+	nEntities       int
+	nEntityPubKeys  int
 	getTimeout      time.Duration
 	putTimeout      time.Duration
 	gcpProjectID    string
 	datastoreAddr   string
 	libriLogLevel   zapcore.Level
 	catalogLogLevel zapcore.Level
+	keyLogLevel     zapcore.Level
 	courierLogLevel zapcore.Level
 }
 
@@ -60,9 +69,13 @@ type state struct {
 	catalog           *catserver.Catalog
 	catalogAddr       *net.TCPAddr
 	catalogClient     catalogapi.CatalogClient
+	key               *keyserver.Key
+	keyAddr           *net.TCPAddr
+	keyClient         keyapi.KeyClient
 	datastoreEmulator *os.Process
 	rng               *rand.Rand
 	putDocs           []*api.Document
+	entityPubKeys     map[string]map[keyapi.KeyType][][]byte
 }
 
 func TestAcceptance(t *testing.T) {
@@ -70,12 +83,15 @@ func TestAcceptance(t *testing.T) {
 		nLibrarians:     8,
 		nCouriers:       3,
 		nPuts:           32,
-		getTimeout:      3 * time.Second,
-		putTimeout:      3 * time.Second,
+		nEntities:       8,
+		nEntityPubKeys:  16,
+		getTimeout:      1 * time.Second,
+		putTimeout:      1 * time.Second,
 		gcpProjectID:    "dummy-courier-acceptance",
 		datastoreAddr:   "localhost:2001",
 		libriLogLevel:   zapcore.ErrorLevel,
 		catalogLogLevel: zapcore.ErrorLevel,
+		keyLogLevel:     zapcore.ErrorLevel,
 		courierLogLevel: zapcore.InfoLevel,
 	}
 	st := setUp(params)
@@ -83,6 +99,7 @@ func TestAcceptance(t *testing.T) {
 	// wait for datastore emulator to start
 	time.Sleep(5 * time.Second)
 
+	addEntityPublicKeys(t, params, st)
 	testPut(t, params, st)
 	testGet(t, params, st)
 
@@ -96,9 +113,12 @@ func testPut(t *testing.T, params *parameters, st *state) {
 		if st.rng.Intn(2) == 0 {
 			value, _ = api.NewTestDocument(st.rng)
 		} else {
+			env := libriapi.NewTestEnvelope(st.rng)
+			env.AuthorPublicKey = randPubKey(keyapi.KeyType_AUTHOR, params, st)
+			env.ReaderPublicKey = randPubKey(keyapi.KeyType_READER, params, st)
 			value = &libriapi.Document{
 				Contents: &libriapi.Document_Envelope{
-					Envelope: libriapi.NewTestEnvelope(st.rng),
+					Envelope: env,
 				},
 			}
 		}
@@ -147,19 +167,73 @@ func testGet(t *testing.T, params *parameters, st *state) {
 			cancel()
 			assert.Nil(t, err2)
 			assert.Equal(t, 1, len(sRp.Result))
+
+			// check that entity ID was enriched from key service
+			assert.NotEmpty(t, sRp.Result[0].AuthorEntityId)
+			assert.NotEmpty(t, sRp.Result[0].ReaderEntityId)
 		}
 	}
 }
 
 func setUp(params *parameters) *state {
-	st := &state{rng: rand.New(rand.NewSource(0))}
+	st := &state{
+		rng: rand.New(rand.NewSource(0)),
+	}
 
 	startDatastoreEmulator(params, st)
 	createAndStartLibrarians(params, st)
 	createAndStartCatalog(params, st)
+	createAndStartKey(params, st)
 	createAndStartCouriers(params, st)
 
 	return st
+}
+
+func addEntityPublicKeys(t *testing.T, params *parameters, st *state) {
+	st.entityPubKeys = make(map[string]map[keyapi.KeyType][][]byte)
+	for c := 0; c < params.nEntities; c++ {
+		entityID := getEntityID(c)
+		authorPKs := make([][]byte, params.nEntityPubKeys)
+		readerPKs := make([][]byte, params.nEntityPubKeys)
+		for i := range readerPKs {
+			authorPKs[i] = util.RandBytes(st.rng, 33)
+			readerPKs[i] = util.RandBytes(st.rng, 33)
+		}
+		st.entityPubKeys[entityID] = map[keyapi.KeyType][][]byte{
+			keyapi.KeyType_AUTHOR: authorPKs,
+			keyapi.KeyType_READER: readerPKs,
+		}
+
+		rq := &keyapi.AddPublicKeysRequest{
+			EntityId:   entityID,
+			KeyType:    keyapi.KeyType_AUTHOR,
+			PublicKeys: authorPKs,
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), params.putTimeout)
+		_, err := st.keyClient.AddPublicKeys(ctx, rq)
+		cancel()
+		assert.Nil(t, err)
+
+		rq = &keyapi.AddPublicKeysRequest{
+			EntityId:   entityID,
+			KeyType:    keyapi.KeyType_READER,
+			PublicKeys: readerPKs,
+		}
+		ctx, cancel = context.WithTimeout(context.Background(), params.putTimeout)
+		_, err = st.keyClient.AddPublicKeys(ctx, rq)
+		cancel()
+		assert.Nil(t, err)
+	}
+}
+
+func randPubKey(kt keyapi.KeyType, params *parameters, st *state) []byte {
+	entityID := getEntityID(st.rng.Intn(params.nEntities))
+	i := st.rng.Intn(params.nEntityPubKeys)
+	return st.entityPubKeys[entityID][kt][i]
+}
+
+func getEntityID(c int) string {
+	return fmt.Sprintf("Entity-%d", c)
 }
 
 func createAndStartLibrarians(params *parameters, st *state) {
@@ -233,7 +307,7 @@ func startDatastoreEmulator(params *parameters, st *state) {
 }
 
 func createAndStartCouriers(params *parameters, st *state) {
-	configs, addrs := newCourierConfigs(st.librarianAddrs, st.catalogAddr, params)
+	configs, addrs := newCourierConfigs(st, params)
 	couriers := make([]*cserver.Courier, params.nCouriers)
 	courierClients := make([]courierapi.CourierClient, params.nCouriers)
 	up := make(chan *cserver.Courier, 1)
@@ -257,7 +331,7 @@ func createAndStartCouriers(params *parameters, st *state) {
 	st.courierClients = courierClients
 }
 
-func newCourierConfigs(libAddrs []*net.TCPAddr, catalogAddr *net.TCPAddr, params *parameters) (
+func newCourierConfigs(st *state, params *parameters) (
 	[]*cserver.Config, []*net.TCPAddr) {
 	startPort := 10100
 	configs := make([]*cserver.Config, params.nCouriers)
@@ -275,8 +349,9 @@ func newCourierConfigs(libAddrs []*net.TCPAddr, catalogAddr *net.TCPAddr, params
 	for i := 0; i < params.nCouriers; i++ {
 		serverPort, metricsPort := startPort+i*10, startPort+i*10+1
 		configs[i] = cserver.NewDefaultConfig().
-			WithLibrarianAddrs(libAddrs).
-			WithCatalogAddr(catalogAddr).
+			WithLibrarianAddrs(st.librarianAddrs).
+			WithCatalogAddr(st.catalogAddr).
+			WithKeyAddr(st.keyAddr).
 			WithCache(cacheParams).
 			WithGCPProjectID(params.gcpProjectID)
 		configs[i].WithServerPort(uint(serverPort)).
@@ -319,21 +394,52 @@ func newCatalogConfig(params *parameters) (*catserver.Config, *net.TCPAddr) {
 	return config, addr
 }
 
+func createAndStartKey(params *parameters, st *state) {
+	config, addr := newKeyConfig(params)
+	up := make(chan *keyserver.Key, 1)
+
+	go func() {
+		err := keyserver.Start(config, up)
+		errors.MaybePanic(err)
+	}()
+
+	// wait for key to come up
+	st.key = <-up
+	st.keyAddr = addr
+	cl, err := keyclient.NewInsecure(addr.String())
+	errors.MaybePanic(err)
+	st.keyClient = cl
+}
+
+func newKeyConfig(params *parameters) (*keyserver.Config, *net.TCPAddr) {
+	startPort := 10300
+	storageParams := keystorage.NewDefaultParameters()
+	storageParams.Type = bstorage.DataStore
+	serverPort, metricsPort := startPort, startPort+1
+	config := keyserver.NewDefaultConfig().
+		WithStorage(storageParams).
+		WithGCPProjectID(params.gcpProjectID)
+	config.WithServerPort(uint(serverPort)).
+		WithMetricsPort(uint(metricsPort)).
+		WithLogLevel(params.keyLogLevel)
+	addr := &net.TCPAddr{IP: net.ParseIP("localhost"), Port: int(serverPort)}
+	return config, addr
+}
+
 func tearDown(st *state) {
 
-	// stop couriers
+	// stop services
 	for _, c := range st.couriers {
 		go c.StopServer()
 	}
+	st.catalog.StopServer()
+	st.key.StopServer()
 
 	// stop datastore emulator
 	pgid, err := syscall.Getpgid(st.datastoreEmulator.Pid)
 	errors.MaybePanic(err)
 	err = syscall.Kill(-pgid, syscall.SIGKILL)
 	errors.MaybePanic(err)
-
-	// stop catalog
-	st.catalog.StopServer()
 
 	// stop librarians
 	for _, p1 := range st.librarians {

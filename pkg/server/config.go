@@ -27,6 +27,9 @@ const (
 	// DefaultCatalogPutTimeout is the default timeout for catalog Put requests.
 	DefaultCatalogPutTimeout = 1 * time.Second
 
+	// DefaultKeyGetTimeout is the default timeout for key Get requests.
+	DefaultKeyGetTimeout = 1 * time.Second
+
 	// DefaultCatalogPutQueueSize is the default size of the catalog Put queue.
 	DefaultCatalogPutQueueSize = 256
 
@@ -62,6 +65,9 @@ type Config struct {
 	CatalogPutQueueSize uint
 	NCatalogPutters     uint
 
+	Key           *net.TCPAddr
+	KeyGetTimeout time.Duration
+
 	GCPProjectID string
 	Cache        *cache.Parameters
 }
@@ -80,6 +86,7 @@ func NewDefaultConfig() *Config {
 		WithDefaultSubscribeTo().
 		WithDefaultCatalogPutQueueSize().
 		WithDefaultNCatalogPutters().
+		WithDefaultKeyGetTimeout().
 		WithDefaultCache()
 }
 
@@ -284,5 +291,27 @@ func (c *Config) WithDefaultCache() *Config {
 // WithLibrarianAddrs sets the librarian addresses to the given value.
 func (c *Config) WithLibrarianAddrs(librarianAddrs []*net.TCPAddr) *Config {
 	c.Librarians = librarianAddrs
+	return c
+}
+
+// WithKeyAddr sets the key addresses to the given value.
+func (c *Config) WithKeyAddr(addr *net.TCPAddr) *Config {
+	c.Key = addr
+	return c
+}
+
+// WithKeyGetTimeout sets the key Get request timeout to the given value or to the default
+// if it is zero-valued.
+func (c *Config) WithKeyGetTimeout(t time.Duration) *Config {
+	if t == 0 {
+		return c.WithDefaultKeyGetTimeout()
+	}
+	c.KeyGetTimeout = t
+	return c
+}
+
+// WithDefaultKeyGetTimeout sets the key Get request timeout to the default value.
+func (c *Config) WithDefaultKeyGetTimeout() *Config {
+	c.KeyGetTimeout = DefaultKeyGetTimeout
 	return c
 }
