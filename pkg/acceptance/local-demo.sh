@@ -113,6 +113,7 @@ docker run --name "${name}" --net=courier -d -p ${port}:${port} ${COURIER_IMAGE}
     --logLevel "${LIBRI_LOG_LEVEL}" \
     --serverPort ${port} \
     --librarians ${librarian_addrs} \
+    --key ${key_addr} \
     --catalog ${catalog_addr}
 courier_addrs="${name}:${port}"
 courier_containers="${name}"
