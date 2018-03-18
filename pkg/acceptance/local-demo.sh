@@ -16,6 +16,8 @@ LIBRI_LOG_LEVEL="${LIBRI_LOG_LEVEL:-INFO}"  # or DEBUG
 LIBRI_TIMEOUT="${LIBRI_TIMEOUT:-5}"  # 10, or 20 for really sketchy network
 CATALOG_LOG_LEVEL="${CATALOG_LOG_LEVEL:-INFO}"  # or DEBUG
 CATALOG_TIMEOUT="${CATALOG_TIMEOUT:-5}"  # 10, or 20 for really sketchy network
+KEY_LOG_LEVEL="${CATALOG_LOG_LEVEL:-INFO}"  # or DEBUG
+KEY_TIMEOUT="${CATALOG_TIMEOUT:-5}"  # 10, or 20 for really sketchy network
 COURIER_LOG_LEVEL="${COURIER_LOG_LEVEL:-INFO}"  # or DEBUG
 COURIER_TIMEOUT="${COURIER_TIMEOUT:-5}"  # 10, or 20 for really sketchy network
 COURIER_TEST_IO_N_DOCS="${COURIER_TEST_IO_N_DOCS:-8}"
@@ -28,6 +30,7 @@ LIBRI_IMAGE="daedalus2718/libri:latest"  # latest release
 N_LIBRARIANS=4
 COURIER_IMAGE="gcr.io/elxir-core-infra/courier:snapshot" # develop
 CATALOG_IMAGE="gcr.io/elxir-core-infra/catalog:snapshot" # develop
+KEY_IMAGE="gcr.io/elxir-core-infra/key:snapshot" # develop
 
 echo
 echo "cleaning up from previous runs..."
@@ -83,6 +86,23 @@ echo "testing catalog health..."
 docker run --rm --net=courier ${CATALOG_IMAGE} test health \
     --catalogs "${catalog_addr}" \
     --logLevel "${CATALOG_LOG_LEVEL}"
+
+echo
+echo "starting key..."
+port=10100
+name="key-0"
+docker run --name "${name}" --net=courier -d -p ${port}:${port} ${KEY_IMAGE} \
+    start \
+    --logLevel "${KEY_LOG_LEVEL}" \
+    --serverPort ${port}
+key_addr="${name}:${port}"
+key_containers="${name}"
+
+echo
+echo "testing key health..."
+docker run --rm --net=courier ${KEY_IMAGE} test health \
+    --addresses "${key_addr}" \
+    --logLevel "${KEY_LOG_LEVEL}"
 
 echo
 echo "starting courier..."
