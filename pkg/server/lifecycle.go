@@ -254,7 +254,7 @@ func (c *Courier) getEntityIDs(authorPub, readerPub []byte) (string, string, err
 	c.Logger.Debug("getting entity IDs", logGetEntityIDs(rq)...)
 	bo := newTimeoutExpBackoff(c.config.KeyGetTimeout)
 	ctx, cancel := context.WithTimeout(context.Background(),
-		c.config.CatalogPutTimeout)
+		c.config.KeyGetTimeout)
 	defer cancel()
 	var rp *keyapi.GetPublicKeyDetailsResponse
 	op := func() error {
