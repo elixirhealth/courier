@@ -13,18 +13,24 @@ import (
 	"github.com/drausin/libri/libri/librarian/api"
 	libriapi "github.com/drausin/libri/libri/librarian/api"
 	"github.com/elxirhealth/catalog/pkg/catalogapi"
+	"github.com/elxirhealth/key/pkg/keyapi"
 	"github.com/elxirhealth/service-base/pkg/util"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
 	okConfig = NewDefaultConfig().
-		WithLibrarianAddrs([]*net.TCPAddr{{IP: net.ParseIP("localhost"), Port: 20100}}).
-		WithCatalogAddr(&net.TCPAddr{IP: net.ParseIP("localhost"), Port: 20200})
+			WithLibrarianAddrs([]*net.TCPAddr{{IP: net.ParseIP("localhost"), Port: 20100}}).
+			WithCatalogAddr(&net.TCPAddr{IP: net.ParseIP("localhost"), Port: 20200}).
+			WithKeyAddr(&net.TCPAddr{IP: net.ParseIP("localhost"), Port: 20300})
+
+	errTest = errors.New("some test error")
 )
 
 func init() {
@@ -51,7 +57,8 @@ func TestStart(t *testing.T) {
 func TestCourier_startEvictor(t *testing.T) {
 	config := NewDefaultConfig().
 		WithLibrarianAddrs([]*net.TCPAddr{{IP: net.ParseIP("localhost"), Port: 20100}}).
-		WithCatalogAddr(&net.TCPAddr{IP: net.ParseIP("localhost"), Port: 20200})
+		WithCatalogAddr(&net.TCPAddr{IP: net.ParseIP("localhost"), Port: 20200}).
+		WithKeyAddr(&net.TCPAddr{IP: net.ParseIP("localhost"), Port: 20300})
 	config.Cache.EvictionPeriod = 10 * time.Millisecond
 
 	c, err := newCourier(config)
@@ -112,7 +119,7 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	assert.Nil(t, err)
 	testPub := &fixedPublisher{}
 	c.cache = &fixedCache{
-		getErr: errors.New("some cache Get error"),
+		getErr: errTest,
 	}
 	c.libriPublisher = testPub
 	for i := 0; i < libriPutterErrQueueSize; i++ {
@@ -140,7 +147,7 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	c, err = newCourier(okConfig)
 	assert.Nil(t, err)
 	testPub = &fixedPublisher{
-		err: errors.New("some Publish error"),
+		err: errTest,
 	}
 	c.cache = &fixedCache{value: docBytes}
 	c.libriPublisher = testPub
@@ -163,7 +170,7 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	testPub = &fixedPublisher{}
 	c.libriPublisher = testPub
 	testAR := &fixedAccessRecorder{
-		libriPutErr: errors.New("some access recorder libri put error"),
+		libriPutErr: errTest,
 	}
 	c.accessRecorder = testAR
 	for i := 0; i < libriPutterErrQueueSize; i++ {
@@ -183,6 +190,12 @@ func TestCourier_startCatalogPutters_ok(t *testing.T) {
 
 	catalogClient := &fixedCatalogClient{}
 	c.catalog = catalogClient
+	c.key = &fixedKeyClient{
+		getPKD: []*keyapi.PublicKeyDetail{
+			{EntityId: "some author ID"},
+			{EntityId: "some reader ID"},
+		},
+	}
 	pub := &libriapi.Publication{
 		EnvelopeKey:     util.RandBytes(rng, 32),
 		EntryKey:        util.RandBytes(rng, 32),
@@ -220,7 +233,7 @@ func TestCourier_startCatalogPutters_err(t *testing.T) {
 	c, err := newCourier(okConfig)
 	assert.Nil(t, err)
 	catalogClient := &fixedCatalogClient{
-		putErr: errors.New("some Put error"),
+		putErr: errTest,
 	}
 	c.catalog = catalogClient
 	for i := 0; i < catalogPutterErrQueueSize; i++ {
@@ -236,6 +249,90 @@ func TestCourier_startCatalogPutters_err(t *testing.T) {
 		// check that publish errors put keys back onto the queue
 		<-c.catalogPutQueue
 	}
+}
+
+func TestCourier_putCatalog_ok(t *testing.T) {
+	rng := rand.New(rand.NewSource(0))
+	authorEntityID, readerEntityID := "author entity ID", "reader entity ID"
+
+	c, err := newCourier(okConfig)
+	assert.Nil(t, err)
+	catClient := &fixedCatalogClient{}
+	c.catalog = catClient
+	c.key = &fixedKeyClient{
+		getPKD: []*keyapi.PublicKeyDetail{
+			{EntityId: authorEntityID},
+			{EntityId: readerEntityID},
+		},
+	}
+
+	// entity IDs already exist in PR
+	pr := &catalogapi.PublicationReceipt{
+		EnvelopeKey:     util.RandBytes(rng, 32),
+		EntryKey:        util.RandBytes(rng, 32),
+		AuthorPublicKey: util.RandBytes(rng, 33),
+		AuthorEntityId:  authorEntityID,
+		ReaderPublicKey: util.RandBytes(rng, 33),
+		ReaderEntityId:  readerEntityID,
+	}
+	err = c.putCatalog(pr)
+	assert.Nil(t, err)
+	assert.Equal(t, authorEntityID, catClient.putRq.Value.AuthorEntityId)
+	assert.Equal(t, readerEntityID, catClient.putRq.Value.ReaderEntityId)
+
+	// entity IDs don't exist
+	pr = &catalogapi.PublicationReceipt{
+		EnvelopeKey:     util.RandBytes(rng, 32),
+		EntryKey:        util.RandBytes(rng, 32),
+		AuthorPublicKey: util.RandBytes(rng, 33),
+		ReaderPublicKey: util.RandBytes(rng, 33),
+	}
+	err = c.putCatalog(pr)
+	assert.Nil(t, err)
+	assert.Equal(t, authorEntityID, catClient.putRq.Value.AuthorEntityId)
+	assert.Equal(t, readerEntityID, catClient.putRq.Value.ReaderEntityId)
+}
+
+func TestCourier_getEntityIDs_ok(t *testing.T) {
+	rng := rand.New(rand.NewSource(0))
+	authorPub, readerPub := util.RandBytes(rng, 33), util.RandBytes(rng, 33)
+	authorEntityID, readerEntityID := "author entity ID", "reader entity ID"
+
+	c, err := newCourier(okConfig)
+	assert.Nil(t, err)
+	c.key = &fixedKeyClient{
+		getPKD: []*keyapi.PublicKeyDetail{
+			{EntityId: authorEntityID},
+			{EntityId: readerEntityID},
+		},
+	}
+	gotAuthorID, gotReaderID, err := c.getEntityIDs(authorPub, readerPub)
+	assert.Nil(t, err)
+	assert.Equal(t, authorEntityID, gotAuthorID)
+	assert.Equal(t, readerEntityID, gotReaderID)
+}
+
+func TestCourier_getEntityIDs_err(t *testing.T) {
+	rng := rand.New(rand.NewSource(0))
+	authorPub, readerPub := util.RandBytes(rng, 33), util.RandBytes(rng, 33)
+
+	c, err := newCourier(okConfig)
+	assert.Nil(t, err)
+
+	// not found
+	rpErr := status.Error(codes.NotFound, keyapi.ErrNoSuchPublicKey.Error())
+	c.key = &fixedKeyClient{getPKDErr: rpErr}
+	gotAuthorID, gotReaderID, err := c.getEntityIDs(authorPub, readerPub)
+	assert.Nil(t, err)
+	assert.Empty(t, gotAuthorID)
+	assert.Empty(t, gotReaderID)
+
+	// other error
+	c.key = &fixedKeyClient{getPKDErr: errTest}
+	gotAuthorID, gotReaderID, err = c.getEntityIDs(authorPub, readerPub)
+	assert.Equal(t, errTest, err)
+	assert.Empty(t, gotAuthorID)
+	assert.Empty(t, gotReaderID)
 }
 
 type fixedPublisher struct {
@@ -297,6 +394,7 @@ func (r *fixedAccessRecorder) GetNextEvictions() ([]string, error) {
 }
 
 type fixedCatalogClient struct {
+	putRq  *catalogapi.PutRequest
 	putRp  *catalogapi.PutResponse
 	putErr error
 	nPuts  int
@@ -308,6 +406,7 @@ func (f *fixedCatalogClient) Put(
 ) (*catalogapi.PutResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.putRq = in
 	f.nPuts++
 	return f.putRp, f.putErr
 }
@@ -316,4 +415,36 @@ func (f *fixedCatalogClient) Search(
 	ctx context.Context, in *catalogapi.SearchRequest, opts ...grpc.CallOption,
 ) (*catalogapi.SearchResponse, error) {
 	panic("implement me")
+}
+
+type fixedKeyClient struct {
+	getPKD    []*keyapi.PublicKeyDetail
+	getPKDErr error
+}
+
+func (f *fixedKeyClient) AddPublicKeys(
+	ctx context.Context, in *keyapi.AddPublicKeysRequest, opts ...grpc.CallOption,
+) (*keyapi.AddPublicKeysResponse, error) {
+	panic("implement me")
+}
+
+func (f *fixedKeyClient) GetPublicKeys(
+	ctx context.Context, in *keyapi.GetPublicKeysRequest, opts ...grpc.CallOption,
+) (*keyapi.GetPublicKeysResponse, error) {
+	panic("implement me")
+}
+
+func (f *fixedKeyClient) SamplePublicKeys(
+	ctx context.Context, in *keyapi.SamplePublicKeysRequest, opts ...grpc.CallOption,
+) (*keyapi.SamplePublicKeysResponse, error) {
+	panic("implement me")
+}
+
+func (f *fixedKeyClient) GetPublicKeyDetails(
+	ctx context.Context, in *keyapi.GetPublicKeyDetailsRequest, opts ...grpc.CallOption,
+) (*keyapi.GetPublicKeyDetailsResponse, error) {
+	if f.getPKDErr != nil {
+		return nil, f.getPKDErr
+	}
+	return &keyapi.GetPublicKeyDetailsResponse{PublicKeyDetails: f.getPKD}, f.getPKDErr
 }

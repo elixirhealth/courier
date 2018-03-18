@@ -128,3 +128,18 @@ func TestConfig_WithLibrarianAddrs(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(c.WithLibrarianAddrs([]*net.TCPAddr{addr}).Librarians))
 }
+
+func TestConfig_WithKeyAddr(t *testing.T) {
+	c := &Config{}
+	addr, err := net.ResolveTCPAddr("tcp4", "localhost:1234")
+	assert.Nil(t, err)
+	assert.NotNil(t, c.WithKeyAddr(addr).Key)
+}
+
+func TestConfig_WithKeyGetTimeout(t *testing.T) {
+	c1, c2, c3 := &Config{}, &Config{}, &Config{}
+	c1.WithDefaultKeyGetTimeout()
+	assert.Equal(t, c1.KeyGetTimeout, c2.WithKeyGetTimeout(0).KeyGetTimeout)
+	assert.NotEqual(t, c1.KeyGetTimeout,
+		c3.WithKeyGetTimeout(2*time.Second).KeyGetTimeout)
+}

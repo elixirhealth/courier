@@ -11,6 +11,7 @@ import (
 	libriapi "github.com/drausin/libri/libri/librarian/api"
 	"github.com/elxirhealth/courier/pkg/cache"
 	api "github.com/elxirhealth/courier/pkg/courierapi"
+	"github.com/elxirhealth/key/pkg/keyapi"
 	"github.com/elxirhealth/service-base/pkg/server"
 	bstorage "github.com/elxirhealth/service-base/pkg/server/storage"
 	"github.com/golang/protobuf/proto"
@@ -70,6 +71,7 @@ func TestCourier_Put_ok(t *testing.T) {
 		config:        NewDefaultConfig(),
 		cache:         cc,
 		catalog:       &fixedCatalogClient{},
+		key:           &fixedKeyClient{},
 		libriPutQueue: make(chan string, 1),
 	}
 	rp, err := c.Put(context.Background(), rq)
@@ -82,10 +84,16 @@ func TestCourier_Put_ok(t *testing.T) {
 	cc = &fixedCache{getErr: cache.ErrMissingValue}
 	catalog := &fixedCatalogClient{}
 	c = &Courier{
-		BaseServer:    server.NewBaseServer(server.NewDefaultBaseConfig()),
-		config:        NewDefaultConfig(),
-		cache:         cc,
-		catalog:       catalog,
+		BaseServer: server.NewBaseServer(server.NewDefaultBaseConfig()),
+		config:     NewDefaultConfig(),
+		cache:      cc,
+		catalog:    catalog,
+		key: &fixedKeyClient{
+			getPKD: []*keyapi.PublicKeyDetail{
+				{EntityId: "some author ID"},
+				{EntityId: "some reader ID"},
+			},
+		},
 		libriPutQueue: make(chan string, 1),
 	}
 	rp, err = c.Put(context.Background(), rq)

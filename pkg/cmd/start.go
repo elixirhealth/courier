@@ -38,11 +38,14 @@ const (
 	nCatalogPuttersFlag        = "nCatalogPutters"
 	catalogPutQueueSizeFlag    = "catalogPutQueueSize"
 	catalogTimeoutFlag         = "catalogTimeout"
+	keyFlag                    = "key"
+	keyTimeoutFlag             = "keyTimeout"
 )
 
 var (
 	errMissingLibrarians         = errors.New("missing librarian addresses")
 	errMissingCatalog            = errors.New("missing catalog address")
+	errMissingKey                = errors.New("missing key address")
 	errMultipleCacheStorageTypes = errors.New("multiple cache storage types specified")
 	errNoCacheStorageType        = errors.New("no cache storage type specified")
 )
@@ -102,6 +105,10 @@ func init() {
 		"size of the queue for publications to put into the catalog")
 	startCmd.Flags().Duration(catalogTimeoutFlag, server.DefaultCatalogPutTimeout,
 		"timeout for catalog Put requests")
+	startCmd.Flags().String(keyFlag, "",
+		"key service address")
+	startCmd.Flags().Duration(keyTimeoutFlag, server.DefaultKeyGetTimeout,
+		"timeout for key Get requests")
 
 	// bind viper flags
 	viper.SetEnvPrefix(envVarPrefix) // look for env vars with "COURIER_" prefix
@@ -123,6 +130,14 @@ func getCourierConfig() (*server.Config, error) {
 		return nil, errMissingCatalog
 	}
 	catalogAddr, err := net.ResolveTCPAddr("tcp4", catalogStrAddr)
+	if err != nil {
+		return nil, err
+	}
+	keyStrAddr := viper.GetString(keyFlag)
+	if keyStrAddr == "" {
+		return nil, errMissingKey
+	}
+	keyAddr, err := net.ResolveTCPAddr("tcp4", keyStrAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +169,9 @@ func getCourierConfig() (*server.Config, error) {
 		WithCatalogAddr(catalogAddr).
 		WithNCatalogPutters(uint(viper.GetInt(nCatalogPuttersFlag))).
 		WithCatalogPutQueueSize(uint(viper.GetInt(catalogPutQueueSizeFlag))).
-		WithCatalogPutTimeout(viper.GetDuration(catalogTimeoutFlag))
+		WithCatalogPutTimeout(viper.GetDuration(catalogTimeoutFlag)).
+		WithKeyAddr(keyAddr).
+		WithKeyGetTimeout(viper.GetDuration(keyTimeoutFlag))
 
 	lg := lserver.NewDevLogger(c.LogLevel)
 	lg.Info("successfully parsed config", zap.Object("config", c))

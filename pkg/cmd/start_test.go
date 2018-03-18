@@ -32,6 +32,8 @@ func TestGetCourierConfig(t *testing.T) {
 	nCatalogPutters := uint(12)
 	catalogPutQueueSize := uint(48)
 	catalogTimeout := 15 * time.Second
+	key := "127.0.0.1:20200"
+	keyTimeout := 16 * time.Second
 
 	viper.Set(serverPortFlag, serverPort)
 	viper.Set(metricsPortFlag, metricsPort)
@@ -53,6 +55,8 @@ func TestGetCourierConfig(t *testing.T) {
 	viper.Set(nCatalogPuttersFlag, nCatalogPutters)
 	viper.Set(catalogPutQueueSizeFlag, catalogPutQueueSize)
 	viper.Set(catalogTimeoutFlag, catalogTimeout)
+	viper.Set(keyFlag, key)
+	viper.Set(keyTimeoutFlag, keyTimeout)
 
 	c, err := getCourierConfig()
 	assert.Nil(t, err)
@@ -77,6 +81,8 @@ func TestGetCourierConfig(t *testing.T) {
 	assert.Equal(t, nCatalogPutters, c.NCatalogPutters)
 	assert.Equal(t, catalogPutQueueSize, c.CatalogPutQueueSize)
 	assert.Equal(t, catalogTimeout, c.CatalogPutTimeout)
+	assert.Equal(t, key, c.Key.String())
+	assert.Equal(t, keyTimeout, c.KeyGetTimeout)
 }
 
 func TestGetCacheStorageType(t *testing.T) {

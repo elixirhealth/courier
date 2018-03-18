@@ -12,10 +12,13 @@ import (
 	libriapi "github.com/drausin/libri/libri/librarian/api"
 	"github.com/elxirhealth/catalog/pkg/catalogapi"
 	api "github.com/elxirhealth/courier/pkg/courierapi"
+	"github.com/elxirhealth/key/pkg/keyapi"
 	"github.com/elxirhealth/service-base/pkg/server"
 	"github.com/golang/protobuf/proto"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -197,13 +200,12 @@ func (c *Courier) startCatalogPutters() {
 				if c.BaseServer.State() >= server.Stopping {
 					return
 				}
+				// TODO (drausin) get from catalog first and only put if doesn't exist
 				err := c.putCatalog(&catalogapi.PublicationReceipt{
 					EnvelopeKey:     pub.EnvelopeKey,
 					EntryKey:        pub.EntryKey,
 					AuthorPublicKey: pub.AuthorPublicKey,
 					ReaderPublicKey: pub.ReaderPublicKey,
-					// TODO (drausin) get author and reader entity IDs from key
-					// service
 				})
 				if err != nil {
 					// add back onto queue so we don't drop it
@@ -220,7 +222,16 @@ func (c *Courier) startCatalogPutters() {
 
 func (c *Courier) putCatalog(pr *catalogapi.PublicationReceipt) error {
 	pr.ReceivedTime = time.Now().UnixNano() / 1E3
+	if pr.AuthorEntityId == "" || pr.ReaderEntityId == "" {
+		aEntityID, rEntityID, err := c.getEntityIDs(pr.AuthorPublicKey, pr.ReaderPublicKey)
+		if err != nil {
+			return err
+		}
+		pr.AuthorEntityId = aEntityID
+		pr.ReaderEntityId = rEntityID
+	}
 	rq := &catalogapi.PutRequest{Value: pr}
+	c.Logger.Debug("putting publication", logPutPublication(rq)...)
 	bo := newTimeoutExpBackoff(c.config.CatalogPutTimeout)
 	ctx, cancel := context.WithTimeout(context.Background(),
 		c.config.CatalogPutTimeout)
@@ -229,7 +240,43 @@ func (c *Courier) putCatalog(pr *catalogapi.PublicationReceipt) error {
 		_, err := c.catalog.Put(ctx, rq)
 		return err
 	}
-	return backoff.Retry(op, bo)
+	if err := backoff.Retry(op, bo); err != nil {
+		return err
+	}
+	c.Logger.Debug("put publication", logPutPublication(rq)...)
+	return nil
+}
+
+func (c *Courier) getEntityIDs(authorPub, readerPub []byte) (string, string, error) {
+	rq := &keyapi.GetPublicKeyDetailsRequest{
+		PublicKeys: [][]byte{authorPub, readerPub},
+	}
+	c.Logger.Debug("getting entity IDs", logGetEntityIDs(rq)...)
+	bo := newTimeoutExpBackoff(c.config.KeyGetTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(),
+		c.config.KeyGetTimeout)
+	defer cancel()
+	var rp *keyapi.GetPublicKeyDetailsResponse
+	op := func() error {
+		var err error
+		rp, err = c.key.GetPublicKeyDetails(ctx, rq)
+		if err == nil || status.Convert(err).Code() == codes.NotFound {
+			return nil
+		}
+		c.Logger.Debug("error getting public key details", zap.Error(err))
+		return err
+	}
+	if err := backoff.Retry(op, bo); err != nil {
+		return "", "", err
+	}
+	if rp == nil {
+		c.Logger.Debug("entity IDs not found", logGetEntityIDs(rq)...)
+		return "", "", nil
+	}
+	authorEntityID := rp.PublicKeyDetails[0].EntityId
+	readerEntityID := rp.PublicKeyDetails[1].EntityId
+	c.Logger.Debug("got entity IDs", logGotEntityIDs(rq, rp)...)
+	return authorEntityID, readerEntityID, nil
 }
 
 func newTimeoutExpBackoff(timeout time.Duration) backoff.BackOff {
