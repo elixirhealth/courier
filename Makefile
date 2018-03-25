@@ -29,7 +29,7 @@ demo:
 
 docker-image:
 	@echo "--> Building docker image"
-	@docker build --rm=false -t gcr.io/elxir-core-infra/courier:snapshot deploy
+	@docker build --rm=false -t gcr.io/elixir-core-prod/courier:snapshot deploy
 
 fix:
 	@echo "--> Running goimports"

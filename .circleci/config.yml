@@ -2,7 +2,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: gcr.io/elxir-core-infra/service-base-build:latest
+      - image: gcr.io/elixir-core-prod/service-base-build:latest
         user: root
         auth:
           username: _json_key
@@ -51,11 +51,11 @@ jobs:
             if [[ "${CIRCLE_BRANCH}" == "master" ]]; then
               docker login -u _json_key -p "${GCR_SVC_JSON}" gcr.io
               COURIER_VERSION=$(./deploy/bin/courier version)
-              docker tag gcr.io/elxir-core-infra/courier:snapshot gcr.io/elxir-core-infra/courier:${COURIER_VERSION}
-              docker tag gcr.io/elxir-core-infra/courier:snapshot gcr.io/elxir-core-infra/courier:latest
-              docker push gcr.io/elxir-core-infra/courier:${COURIER_VERSION}
-              docker push gcr.io/elxir-core-infra/courier:latest
+              docker tag gcr.io/elixir-core-prod/courier:snapshot gcr.io/elixir-core-prod/courier:${COURIER_VERSION}
+              docker tag gcr.io/elixir-core-prod/courier:snapshot gcr.io/elixir-core-prod/courier:latest
+              docker push gcr.io/elixir-core-prod/courier:${COURIER_VERSION}
+              docker push gcr.io/elixir-core-prod/courier:latest
             elif [[ "${CIRCLE_BRANCH}" == "develop" ]]; then
               docker login -u _json_key -p "${GCR_SVC_JSON}" gcr.io
-              docker push gcr.io/elxir-core-infra/courier:snapshot
+              docker push gcr.io/elixir-core-prod/courier:snapshot
             fi
