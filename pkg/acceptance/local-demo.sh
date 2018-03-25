@@ -28,9 +28,9 @@ LOCAL_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # container command constants
 LIBRI_IMAGE="daedalus2718/libri:latest"  # latest release
 N_LIBRARIANS=4
-COURIER_IMAGE="gcr.io/elxir-core-infra/courier:snapshot" # develop
-CATALOG_IMAGE="gcr.io/elxir-core-infra/catalog:snapshot" # develop
-KEY_IMAGE="gcr.io/elxir-core-infra/key:snapshot" # develop
+COURIER_IMAGE="gcr.io/elixir-core-prod/courier:snapshot" # develop
+CATALOG_IMAGE="gcr.io/elixir-core-prod/catalog:snapshot" # develop
+KEY_IMAGE="gcr.io/elixir-core-prod/key:snapshot" # develop
 
 echo
 echo "cleaning up from previous runs..."
