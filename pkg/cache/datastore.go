@@ -9,7 +9,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/drausin/libri/libri/common/id"
-	bstorage "github.com/elxirhealth/service-base/pkg/server/storage"
+	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
 	"go.uber.org/zap"
 	"google.golang.org/api/iterator"
 )

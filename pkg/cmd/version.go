@@ -3,7 +3,7 @@ package cmd
 import (
 	"os"
 
-	"github.com/elxirhealth/courier/version"
+	"github.com/elixirhealth/courier/version"
 	"github.com/spf13/cobra"
 )
 

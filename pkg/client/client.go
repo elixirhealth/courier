@@ -1,7 +1,7 @@
 package client
 
 import (
-	api "github.com/elxirhealth/courier/pkg/courierapi"
+	api "github.com/elixirhealth/courier/pkg/courierapi"
 	"google.golang.org/grpc"
 )
 

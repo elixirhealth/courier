@@ -6,7 +6,7 @@ import (
 
 	lserver "github.com/drausin/libri/libri/common/logging"
 	"github.com/drausin/libri/libri/common/parse"
-	"github.com/elxirhealth/service-base/pkg/server"
+	"github.com/elixirhealth/service-base/pkg/server"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
