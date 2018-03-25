@@ -9,16 +9,17 @@
     "internal",
     "internal/atomiccache",
     "internal/fields",
+    "internal/trace",
     "internal/version"
   ]
-  revision = "20d4028b8a750c2aca76bf9fefa8ed2d0109b573"
-  version = "v0.19.0"
+  revision = "4b98a6370e36d7a85192e7bad08a4ebd82eac2a8"
+  version = "v0.20.0"
 
 [[projects]]
   branch = "master"
   name = "github.com/beorn7/perks"
   packages = ["quantile"]
-  revision = "4c0e84591b9aa9e6dcfdf3e020114cd81f89d5f9"
+  revision = "3a771d992973f24aa725d07868b467d1ddfceafb"
 
 [[projects]]
   name = "github.com/blang/semver"
@@ -92,7 +93,7 @@
     "pkg/server",
     "pkg/server/storage"
   ]
-  revision = "91a09b55f540b87ea1720bc483a9a4ca993f4d87"
+  revision = "28aa5cc0dde0f4a09503ec706ad318e3b2627c98"
 
 [[projects]]
   branch = "develop"
@@ -103,7 +104,7 @@
     "pkg/server",
     "pkg/server/storage"
   ]
-  revision = "935bc194cda0da986d5ca2d22be6cf38210de38b"
+  revision = "787ce4d36cbebc372522fb99dd41aa3b877242d3"
 
 [[projects]]
   branch = "develop"
@@ -114,7 +115,7 @@
     "pkg/util",
     "pkg/version"
   ]
-  revision = "4db3ff36815e2ea5caccc03f35bb6dfe5dea9fcb"
+  revision = "0ac1d7440a84122b037e7bcc89aec0fd608c85f1"
 
 [[projects]]
   name = "github.com/ethereum/go-ethereum"
@@ -179,6 +180,7 @@
     ".",
     "hcl/ast",
     "hcl/parser",
+    "hcl/printer",
     "hcl/scanner",
     "hcl/strconv",
     "hcl/token",
@@ -186,7 +188,7 @@
     "json/scanner",
     "json/token"
   ]
-  revision = "23c074d0eceb2b8a5bfdbb271ab780cde70f05a8"
+  revision = "f40e974e75af4e271d97ce0fc917af5898ae7bda"
 
 [[projects]]
   name = "github.com/inconshreveable/mousetrap"
@@ -201,7 +203,7 @@
     ".",
     "oid"
   ]
-  revision = "88edab0803230a3898347e77b474f8c1820a1f20"
+  revision = "b2004221932bd6b13167ef654c81cffac36f7537"
 
 [[projects]]
   name = "github.com/magiconair/properties"
@@ -285,7 +287,7 @@
     "nfs",
     "xfs"
   ]
-  revision = "54d17b57dd7d4a3aa092476596b3f8a933bde349"
+  revision = "780932d4fbbe0e69b84c34c20f5c8d0981e109ea"
 
 [[projects]]
   name = "github.com/spaolacci/murmur3"
@@ -329,8 +331,8 @@
 [[projects]]
   name = "github.com/spf13/viper"
   packages = ["."]
-  revision = "25b30aa063fc18e48662b86996252eabdcf2f0c7"
-  version = "v1.0.0"
+  revision = "b5e8006cbee93ec955a89ab31e0e3ce3204f3736"
+  version = "v1.0.2"
 
 [[projects]]
   name = "github.com/stretchr/testify"
@@ -368,8 +370,8 @@
     "trace",
     "trace/propagation"
   ]
-  revision = "52b12e1eb8fdf769ad0bf5fd73a2af9484e6b196"
-  version = "v0.4.0"
+  revision = "6e3f034057826b530038d93267906ec3c012183f"
+  version = "v0.6.0"
 
 [[projects]]
   name = "go.uber.org/atomic"
@@ -409,7 +411,7 @@
     "lex/httplex",
     "trace"
   ]
-  revision = "ae89d30ce0c63142b652837da33d782e2b0a9b25"
+  revision = "6078986fec03a1dcc236c34816c71b0e05018fda"
 
 [[projects]]
   branch = "master"
@@ -421,13 +423,13 @@
     "jws",
     "jwt"
   ]
-  revision = "2f32c3ac0fa4fb807a0fcefb0b6f2468a0d99bd0"
+  revision = "fdc9e635145ae97e6c2cb777c48305600cf515cb"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix"]
-  revision = "c28acc882ebcbfbe8ce9f0f14b9ac26ee138dd51"
+  revision = "91ee8cde435411ca3f1cd365e8f20131aed4d0a1"
 
 [[projects]]
   name = "golang.org/x/text"
@@ -461,7 +463,7 @@
     "option",
     "transport/grpc"
   ]
-  revision = "17ac5598d127e9c0f2a74f1c96d84cf7ebcc312f"
+  revision = "24928b980e6919be4c72647aacd53ebcbb8c4bab"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -488,10 +490,11 @@
   packages = [
     "googleapis/api/annotations",
     "googleapis/datastore/v1",
+    "googleapis/rpc/code",
     "googleapis/rpc/status",
     "googleapis/type/latlng"
   ]
-  revision = "df60624c1e9b9d2973e889c7a1cff73155da81c4"
+  revision = "ab0870e398d5dd054b868c0db1481ab029b9a9f2"
 
 [[projects]]
   name = "google.golang.org/grpc"
@@ -537,6 +540,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "c48805093a9d76e7486466f0e6657f20b0cb980630a88dab0dbbfad86905a508"
+  inputs-digest = "ced7dc944041a666693a881176f831c440972a0f1f1e65eb012f367c5573ea29"
   solver-name = "gps-cdcl"
   solver-version = 1
