@@ -1,7 +1,7 @@
 package version
 
 import (
-	"github.com/elxirhealth/service-base/pkg/version"
+	"github.com/elixirhealth/service-base/pkg/version"
 )
 
 // Current contains the current build info.

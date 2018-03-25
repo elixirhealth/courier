@@ -4,7 +4,7 @@ import (
 	"log"
 
 	"github.com/drausin/libri/libri/common/errors"
-	bserver "github.com/elxirhealth/service-base/pkg/server"
+	bserver "github.com/elixirhealth/service-base/pkg/server"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

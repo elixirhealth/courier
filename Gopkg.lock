@@ -85,7 +85,7 @@
 
 [[projects]]
   branch = "develop"
-  name = "github.com/elxirhealth/catalog"
+  name = "github.com/elixirhealth/catalog"
   packages = [
     "pkg/catalogapi",
     "pkg/client",
@@ -96,7 +96,7 @@
 
 [[projects]]
   branch = "develop"
-  name = "github.com/elxirhealth/key"
+  name = "github.com/elixirhealth/key"
   packages = [
     "pkg/client",
     "pkg/keyapi",
@@ -107,7 +107,7 @@
 
 [[projects]]
   branch = "develop"
-  name = "github.com/elxirhealth/service-base"
+  name = "github.com/elixirhealth/service-base"
   packages = [
     "pkg/server",
     "pkg/server/storage",

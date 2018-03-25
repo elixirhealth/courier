@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/drausin/libri/libri/common/subscribe"
-	"github.com/elxirhealth/courier/pkg/cache"
-	bstorage "github.com/elxirhealth/service-base/pkg/server/storage"
+	"github.com/elixirhealth/courier/pkg/cache"
+	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

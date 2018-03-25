@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	bstorage "github.com/elxirhealth/service-base/pkg/server/storage"
+	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap/zapcore"

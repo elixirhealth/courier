@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/drausin/libri/libri/common/errors"
-	catserver "github.com/elxirhealth/catalog/pkg/server"
-	"github.com/elxirhealth/courier/pkg/server"
-	keyserver "github.com/elxirhealth/key/pkg/server"
+	catserver "github.com/elixirhealth/catalog/pkg/server"
+	"github.com/elixirhealth/courier/pkg/server"
+	keyserver "github.com/elixirhealth/key/pkg/server"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap/zapcore"

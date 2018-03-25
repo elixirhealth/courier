@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/drausin/libri/libri/common/subscribe"
-	"github.com/elxirhealth/courier/pkg/cache"
-	"github.com/elxirhealth/service-base/pkg/server"
+	"github.com/elixirhealth/courier/pkg/cache"
+	"github.com/elixirhealth/service-base/pkg/server"
 	"go.uber.org/zap/zapcore"
 )
 

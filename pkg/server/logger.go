@@ -4,9 +4,9 @@ import (
 	"encoding/hex"
 
 	"github.com/drausin/libri/libri/common/id"
-	"github.com/elxirhealth/catalog/pkg/catalogapi"
-	"github.com/elxirhealth/courier/pkg/courierapi"
-	"github.com/elxirhealth/key/pkg/keyapi"
+	"github.com/elixirhealth/catalog/pkg/catalogapi"
+	"github.com/elixirhealth/courier/pkg/courierapi"
+	"github.com/elixirhealth/key/pkg/keyapi"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
