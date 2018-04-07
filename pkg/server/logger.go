@@ -22,7 +22,7 @@ const (
 	logNLibriPutters       = "libri_n_putters"
 	logClientIDFilepath    = "client_id_filepath"
 	logGCPProjectID        = "gcp_project_id"
-	logCache               = "cache"
+	logStorage             = "storage"
 	logLibrarians          = "librarians"
 	logCatalog             = "catalog"
 	logCatalogPutTimeout   = "catalog_put_timeout"

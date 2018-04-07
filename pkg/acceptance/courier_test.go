@@ -26,9 +26,9 @@ import (
 	catclient "github.com/elixirhealth/catalog/pkg/client"
 	catserver "github.com/elixirhealth/catalog/pkg/server"
 	catstorage "github.com/elixirhealth/catalog/pkg/server/storage"
-	"github.com/elixirhealth/courier/pkg/cache"
 	"github.com/elixirhealth/courier/pkg/courierapi"
 	cserver "github.com/elixirhealth/courier/pkg/server"
+	"github.com/elixirhealth/courier/pkg/server/storage"
 	keyclient "github.com/elixirhealth/key/pkg/client"
 	"github.com/elixirhealth/key/pkg/keyapi"
 	keyserver "github.com/elixirhealth/key/pkg/server"
@@ -338,7 +338,7 @@ func newCourierConfigs(st *state, params *parameters) (
 	addrs := make([]*net.TCPAddr, params.nCouriers)
 
 	// set eviction params to ensure that evictions actually happen during test
-	cacheParams := cache.NewDefaultParameters()
+	cacheParams := storage.NewDefaultParameters()
 	cacheParams.Type = bstorage.DataStore
 	cacheParams.LRUCacheSize = 4
 	cacheParams.EvictionBatchSize = 4

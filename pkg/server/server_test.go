@@ -9,8 +9,8 @@ import (
 
 	"github.com/drausin/libri/libri/common/id"
 	libriapi "github.com/drausin/libri/libri/librarian/api"
-	"github.com/elixirhealth/courier/pkg/cache"
 	api "github.com/elixirhealth/courier/pkg/courierapi"
+	"github.com/elixirhealth/courier/pkg/server/storage"
 	"github.com/elixirhealth/key/pkg/keyapi"
 	"github.com/elixirhealth/service-base/pkg/server"
 	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
@@ -36,7 +36,7 @@ func TestNewCourier_err(t *testing.T) {
 	badConfigs := map[string]*Config{
 		"missing clientID file": NewDefaultConfig().WithClientIDFilepath("missing.der"),
 		"emptyProjectID": NewDefaultConfig().WithCache(
-			&cache.Parameters{Type: bstorage.DataStore},
+			&storage.Parameters{Type: bstorage.DataStore},
 		),
 		"empty librarian addrs": NewDefaultConfig().WithLibrarianAddrs([]*net.TCPAddr{}),
 	}
@@ -64,7 +64,7 @@ func TestCourier_Put_ok(t *testing.T) {
 		Value: value,
 	}
 
-	// when Cache has value, Put request should leave existing
+	// when Storage has value, Put request should leave existing
 	cc := &fixedCache{value: valueBytes}
 	c := &Courier{
 		BaseServer:    server.NewBaseServer(server.NewDefaultBaseConfig()),
@@ -79,9 +79,9 @@ func TestCourier_Put_ok(t *testing.T) {
 	assert.Equal(t, api.PutOperation_LEFT_EXISTING, rp.Operation)
 	assert.Equal(t, key.String(), cc.getKey)
 
-	// when Cache doesn't have value, Put request should store in Cache and add
+	// when Storage doesn't have value, Put request should store in Storage and add
 	// to libriPutQueue queue
-	cc = &fixedCache{getErr: cache.ErrMissingValue}
+	cc = &fixedCache{getErr: storage.ErrMissingValue}
 	catalog := &fixedCatalogClient{}
 	c = &Courier{
 		BaseServer: server.NewBaseServer(server.NewDefaultBaseConfig()),
@@ -124,7 +124,7 @@ func TestCourier_Put_err(t *testing.T) {
 			rq: &api.PutRequest{},
 			c:  &Courier{},
 		},
-		"Cache Get error": {
+		"Storage Get error": {
 			rq: okRq,
 			c: &Courier{
 				cache: &fixedCache{getErr: errors.New("some Get error")},
@@ -137,11 +137,11 @@ func TestCourier_Put_err(t *testing.T) {
 			},
 			err: ErrExistingNotEqualNewDocument,
 		},
-		"Cache Put error": {
+		"Storage Put error": {
 			rq: okRq,
 			c: &Courier{
 				cache: &fixedCache{
-					getErr: cache.ErrMissingValue,
+					getErr: storage.ErrMissingValue,
 					putErr: errors.New("some Put error"),
 				},
 			},
@@ -150,7 +150,7 @@ func TestCourier_Put_err(t *testing.T) {
 			rq: okRq,
 			c: &Courier{
 				cache: &fixedCache{
-					getErr: cache.ErrMissingValue,
+					getErr: storage.ErrMissingValue,
 				},
 				libriPutQueue: make(chan string), // no slack
 			},
@@ -181,7 +181,7 @@ func TestCourier_Get_ok(t *testing.T) {
 		Key: key.Bytes(),
 	}
 
-	// when Cache has doc, Get should return it
+	// when Storage has doc, Get should return it
 	cc := &fixedCache{value: valueBytes}
 	c := &Courier{
 		BaseServer: server.NewBaseServer(server.NewDefaultBaseConfig()),
@@ -192,8 +192,8 @@ func TestCourier_Get_ok(t *testing.T) {
 	assert.Equal(t, value, rp.Value)
 	assert.Equal(t, key.String(), cc.getKey)
 
-	// when Cache doesn't have doc but libri does, Get should return it
-	cc = &fixedCache{getErr: cache.ErrMissingValue}
+	// when Storage doesn't have doc but libri does, Get should return it
+	cc = &fixedCache{getErr: storage.ErrMissingValue}
 	acq := &fixedAcquirer{doc: value}
 	c = &Courier{
 		BaseServer:    server.NewBaseServer(server.NewDefaultBaseConfig()),
@@ -224,7 +224,7 @@ func TestCourier_Get_err(t *testing.T) {
 			rq: &api.GetRequest{},
 			c:  &Courier{},
 		},
-		"Cache Get error": {
+		"Storage Get error": {
 			rq: okRq,
 			c: &Courier{
 				cache: &fixedCache{getErr: errors.New("some Get error")},
@@ -239,22 +239,22 @@ func TestCourier_Get_err(t *testing.T) {
 		"libriAcquirer Acquire error": {
 			rq: okRq,
 			c: &Courier{
-				cache:         &fixedCache{getErr: cache.ErrMissingValue},
+				cache:         &fixedCache{getErr: storage.ErrMissingValue},
 				libriAcquirer: &fixedAcquirer{err: errors.New("some Acquire error")},
 			},
 		},
 		"libriAcquirer Acquire missing doc": {
 			rq: okRq,
 			c: &Courier{
-				cache:         &fixedCache{getErr: cache.ErrMissingValue},
+				cache:         &fixedCache{getErr: storage.ErrMissingValue},
 				libriAcquirer: &fixedAcquirer{err: libriapi.ErrMissingDocument},
 			},
 		},
-		"Cache Put error": {
+		"Storage Put error": {
 			rq: okRq,
 			c: &Courier{
 				cache: &fixedCache{
-					getErr: cache.ErrMissingValue,
+					getErr: storage.ErrMissingValue,
 					putErr: errors.New("some Put error"),
 				},
 				libriAcquirer: &fixedAcquirer{doc: value},

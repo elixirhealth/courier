@@ -1,14 +1,13 @@
-package cache
+package datastore
 
 import (
 	"bytes"
 	"container/heap"
 	"context"
-	"errors"
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"github.com/drausin/libri/libri/common/id"
+	"github.com/elixirhealth/courier/pkg/server/storage"
 	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
 	"go.uber.org/zap"
 	"google.golang.org/api/iterator"
@@ -17,28 +16,7 @@ import (
 const (
 	documentKind     = "document"
 	accessRecordKind = "access_record"
-	keySize          = 2 * id.Length // hex length of document IDs
 	maxValuePartSize = 1024 * 1024
-)
-
-var (
-	// ErrMissingValue indicates that a value is missing for a given key.
-	ErrMissingValue = errors.New("missing value")
-
-	// ErrInvalidKeySize indicates when the key is not the expected length.
-	ErrInvalidKeySize = errors.New("invalid key size")
-
-	// ErrValueTooLarge indicates when the value is too large to be stored.
-	ErrValueTooLarge = errors.New("value too large")
-
-	// ErrExistingNotEqualNewValue indicates when the existing stored value is not the same as
-	// the new value,
-	// violating the cache's immutability assumption.
-	ErrExistingNotEqualNewValue = errors.New("existing value does not equal new value")
-)
-
-const (
-	secsPerDay = 60 * 60 * 24
 )
 
 // MarshaledDocument contains a marshaled Libri api.Document split into up to three parts (to obey
@@ -49,32 +27,32 @@ type MarshaledDocument struct {
 	ValuePart3 []byte `datastore:"value_part_3,noindex,omitempty"`
 }
 
-type datastoreCache struct {
-	params         *Parameters
+type cache struct {
+	params         *storage.Parameters
 	client         bstorage.DatastoreClient
-	accessRecorder AccessRecorder
+	accessRecorder storage.AccessRecorder
 	logger         *zap.Logger
 }
 
-// NewDatastore creates a new GCP DataStore Cache instance. This function assumes the following:
+// New creates a new GCP DataStore Storage instance. This function assumes the following:
 // - if DATASTORE_EMULATOR_HOST env var is set, it uses that instead of project
 // - production creds use GOOGLE_APPLICATION_CREDENTIALS env var to point to the credentials JSON
 // file
-func NewDatastore(
-	gcpProjectID string, params *Parameters, logger *zap.Logger,
-) (Cache, AccessRecorder, error) {
+func New(
+	gcpProjectID string, params *storage.Parameters, logger *zap.Logger,
+) (storage.Cache, storage.AccessRecorder, error) {
 	client, err := datastore.NewClient(context.Background(), gcpProjectID)
 	if err != nil {
 		return nil, nil, err
 	}
 	wrappedClient := &bstorage.DatastoreClientImpl{Inner: client}
-	ar := &datastoreAccessRecorder{
+	ar := &accessRecorder{
 		client: wrappedClient,
 		iter:   &datastoreIteratorImpl{},
 		params: params,
 		logger: logger,
 	}
-	return &datastoreCache{
+	return &cache{
 		params:         params,
 		client:         wrappedClient,
 		accessRecorder: ar,
@@ -82,12 +60,12 @@ func NewDatastore(
 	}, ar, nil
 }
 
-// Put stores the marshaled document value at the hex of its key.
-func (c *datastoreCache) Put(key string, value []byte) error {
-	logger := c.logger.With(zap.String("key", key))
+// Put stores the marshaled document value at the hex of its Key.
+func (c *cache) Put(key string, value []byte) error {
+	logger := c.logger.With(zap.String("Key", key))
 	logger.Debug("putting into cache")
-	if len(key) != keySize {
-		return ErrInvalidKeySize
+	if len(key) != storage.KeySize {
+		return storage.ErrInvalidKeySize
 	}
 	dsKey := datastore.NameKey(documentKind, key, nil)
 	existingValue := &MarshaledDocument{}
@@ -100,7 +78,7 @@ func (c *datastoreCache) Put(key string, value []byte) error {
 	if err == nil {
 		// value exists
 		if !bytes.Equal(value, joinValue(existingValue)) {
-			return ErrExistingNotEqualNewValue
+			return storage.ErrExistingNotEqualNewValue
 		}
 		logger.Debug("cache already contains value")
 		return nil
@@ -122,9 +100,9 @@ func (c *datastoreCache) Put(key string, value []byte) error {
 	return nil
 }
 
-// Get retrieves the marshaled document value of the given hex key.
-func (c *datastoreCache) Get(key string) ([]byte, error) {
-	logger := c.logger.With(zap.String("key", key))
+// Get retrieves the marshaled document value of the given hex Key.
+func (c *cache) Get(key string) ([]byte, error) {
+	logger := c.logger.With(zap.String("Key", key))
 	logger.Debug("getting from cache")
 	cacheKey := datastore.NameKey(documentKind, key, nil)
 	existingCacheValue := &MarshaledDocument{}
@@ -133,7 +111,7 @@ func (c *datastoreCache) Get(key string) ([]byte, error) {
 	if err := c.client.Get(ctx, cacheKey, existingCacheValue); err != nil {
 		if err == datastore.ErrNoSuchEntity {
 			logger.Debug("cache does not have value")
-			return nil, ErrMissingValue
+			return nil, storage.ErrMissingValue
 		}
 		return nil, err
 	}
@@ -145,7 +123,7 @@ func (c *datastoreCache) Get(key string) ([]byte, error) {
 }
 
 // EvictNext removes the next batch of documents eligible for eviction from the cache.
-func (c *datastoreCache) EvictNext() error {
+func (c *cache) EvictNext() error {
 	c.logger.Debug("beginning next eviction")
 	keyNames, err := c.accessRecorder.GetNextEvictions()
 	if err != nil {
@@ -171,26 +149,26 @@ func (c *datastoreCache) EvictNext() error {
 	return nil
 }
 
-type datastoreAccessRecorder struct {
+type accessRecorder struct {
 	client bstorage.DatastoreClient
 	iter   datastoreIterator
-	params *Parameters
+	params *storage.Parameters
 	logger *zap.Logger
 }
 
 // CachePut creates a new access record with the cache's put time for the document with the given
-// key.
-func (r *datastoreAccessRecorder) CachePut(key string) error {
+// Key.
+func (r *accessRecorder) CachePut(key string) error {
 	dsKey := datastore.NameKey(accessRecordKind, key, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), r.params.GetTimeout)
-	err := r.client.Get(ctx, dsKey, &AccessRecord{})
+	err := r.client.Get(ctx, dsKey, &storage.AccessRecord{})
 	cancel()
 	if err != datastore.ErrNoSuchEntity {
 		// either real error or get worked fine (and err is nil), so record already exists;
 		// in both cases, we just want to return the err
 		return err
 	}
-	value := newCachePutAccessRecord()
+	value := storage.NewCachePutAccessRecord()
 	ctx, cancel = context.WithTimeout(context.Background(), r.params.PutTimeout)
 	defer cancel()
 	if _, err = r.client.Put(ctx, dsKey, value); err != nil {
@@ -200,21 +178,21 @@ func (r *datastoreAccessRecorder) CachePut(key string) error {
 	return nil
 }
 
-// CacheGet updates the access record's latest get time for the document with the given key.
-func (r *datastoreAccessRecorder) CacheGet(key string) error {
-	return r.update(key, &AccessRecord{CacheGetTimeLatest: time.Now()})
+// CacheGet updates the access record's latest get time for the document with the given Key.
+func (r *accessRecorder) CacheGet(key string) error {
+	return r.update(key, &storage.AccessRecord{CacheGetTimeLatest: time.Now()})
 }
 
 // LibriPut updates the access record's latest libri put time.
-func (r *datastoreAccessRecorder) LibriPut(key string) error {
-	return r.update(key, &AccessRecord{
+func (r *accessRecorder) LibriPut(key string) error {
+	return r.update(key, &storage.AccessRecord{
 		LibriPutOccurred:     true,
 		LibriPutTimeEarliest: time.Now(),
 	})
 }
 
 // CacheEvict deletes the access record for the documents with the given keys.
-func (r *datastoreAccessRecorder) CacheEvict(keys []string) error {
+func (r *accessRecorder) CacheEvict(keys []string) error {
 	dsKeys := make([]*datastore.Key, len(keys))
 	for i, key := range keys {
 		dsKeys[i] = datastore.NameKey(accessRecordKind, key, nil)
@@ -229,8 +207,8 @@ func (r *datastoreAccessRecorder) CacheEvict(keys []string) error {
 }
 
 // GetNextEvictions gets the next batch of keys for documents to evict.
-func (r *datastoreAccessRecorder) GetNextEvictions() ([]string, error) {
-	beforeDate := time.Now().Unix()/secsPerDay - int64(r.params.RecentWindowDays)
+func (r *accessRecorder) GetNextEvictions() ([]string, error) {
+	beforeDate := time.Now().Unix()/storage.SecsPerDay - int64(r.params.RecentWindowDays)
 
 	r.logger.Debug("finding evictable values", beforeDateFields(beforeDate)...)
 	evictable := datastore.NewQuery(accessRecordKind).
@@ -259,10 +237,10 @@ func (r *datastoreAccessRecorder) GetNextEvictions() ([]string, error) {
 	// get keys of nToEvict docs gotten least recently
 	ctx, cancel = context.WithTimeout(context.Background(), r.params.EvictionQueryTimeout)
 	r.iter.Init(r.client.Run(ctx, evictable))
-	evict := &keyGetTimes{}
+	evict := &storage.KeyGetTimes{}
 	var key *datastore.Key
 	for {
-		record := &AccessRecord{}
+		record := &storage.AccessRecord{}
 		key, err = r.iter.Next(record)
 		if err == iterator.Done {
 			break
@@ -271,7 +249,7 @@ func (r *datastoreAccessRecorder) GetNextEvictions() ([]string, error) {
 			cancel()
 			return nil, err
 		}
-		heap.Push(evict, keyGetTime{key: key.Name, getTime: record.CacheGetTimeLatest})
+		heap.Push(evict, storage.KeyGetTime{Key: key.Name, GetTime: record.CacheGetTimeLatest})
 		if evict.Len() > nToEvict {
 			heap.Pop(evict)
 		}
@@ -279,14 +257,14 @@ func (r *datastoreAccessRecorder) GetNextEvictions() ([]string, error) {
 	cancel()
 	keyNames := make([]string, evict.Len())
 	for i, kgt := range *evict {
-		keyNames[i] = kgt.key
+		keyNames[i] = kgt.Key
 	}
 	r.logger.Debug("found evictable values",
 		nextEvictionsFields(evict.Len(), r.params.LRUCacheSize)...)
 	return keyNames, nil
 }
 
-func (r *datastoreAccessRecorder) Evict(keys []string) error {
+func (r *accessRecorder) Evict(keys []string) error {
 	dsKeys := make([]*datastore.Key, len(keys))
 	for i, keyName := range keys {
 		dsKeys[i] = datastore.NameKey(accessRecordKind, keyName, nil)
@@ -300,9 +278,9 @@ func (r *datastoreAccessRecorder) Evict(keys []string) error {
 	return nil
 }
 
-func (r *datastoreAccessRecorder) update(key string, update *AccessRecord) error {
+func (r *accessRecorder) update(key string, update *storage.AccessRecord) error {
 	dsKey := datastore.NameKey(accessRecordKind, key, nil)
-	existing := &AccessRecord{}
+	existing := &storage.AccessRecord{}
 	ctx, cancel := context.WithTimeout(context.Background(), r.params.GetTimeout)
 	if err := r.client.Get(ctx, dsKey, existing); err != nil {
 		cancel()
@@ -310,7 +288,7 @@ func (r *datastoreAccessRecorder) update(key string, update *AccessRecord) error
 	}
 	cancel()
 	updated := *existing
-	updateAccessRecord(&updated, update)
+	storage.UpdateAccessRecord(&updated, update)
 	ctx, cancel = context.WithTimeout(context.Background(), r.params.PutTimeout)
 	defer cancel()
 	if _, err := r.client.Put(ctx, dsKey, &updated); err != nil {
@@ -319,18 +297,6 @@ func (r *datastoreAccessRecorder) update(key string, update *AccessRecord) error
 	r.logger.Debug("updated access record",
 		updatedAccessRecordFields(key, existing, &updated)...)
 	return nil
-}
-
-func updateAccessRecord(existing, update *AccessRecord) {
-	if !update.CacheGetTimeLatest.IsZero() {
-		existing.CacheGetTimeLatest = update.CacheGetTimeLatest
-	}
-	if !update.LibriPutTimeEarliest.IsZero() {
-		existing.LibriPutTimeEarliest = update.LibriPutTimeEarliest
-	}
-	if update.LibriPutOccurred {
-		existing.LibriPutOccurred = update.LibriPutOccurred
-	}
 }
 
 type datastoreIterator interface {
@@ -369,7 +335,7 @@ func splitValue(value []byte) (*MarshaledDocument, error) {
 			ValuePart3: value[2*maxValuePartSize:],
 		}, nil
 	}
-	return nil, ErrValueTooLarge
+	return nil, storage.ErrValueTooLarge
 }
 
 func joinValue(cacheValue *MarshaledDocument) []byte {

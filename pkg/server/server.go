@@ -15,8 +15,8 @@ import (
 	"github.com/drausin/libri/libri/librarian/client"
 	"github.com/elixirhealth/catalog/pkg/catalogapi"
 	catalogclient "github.com/elixirhealth/catalog/pkg/client"
-	"github.com/elixirhealth/courier/pkg/cache"
 	api "github.com/elixirhealth/courier/pkg/courierapi"
+	"github.com/elixirhealth/courier/pkg/server/storage"
 	keyclient "github.com/elixirhealth/key/pkg/client"
 	"github.com/elixirhealth/key/pkg/keyapi"
 	"github.com/elixirhealth/service-base/pkg/server"
@@ -26,7 +26,7 @@ import (
 )
 
 var (
-	// ErrDocumentNotFound indicates when a document is found in neither the Cache nor libri
+	// ErrDocumentNotFound indicates when a document is found in neither the Storage nor libri
 	// for a given key.
 	ErrDocumentNotFound = errors.New("document not found")
 
@@ -47,8 +47,8 @@ type Courier struct {
 	config *Config
 
 	clientID       ecid.ID
-	cache          cache.Cache
-	accessRecorder cache.AccessRecorder
+	cache          storage.Cache
+	accessRecorder storage.AccessRecorder
 
 	libriGetter    libriapi.Getter
 	libriPutter    libriapi.Putter
@@ -143,7 +143,7 @@ func newCourier(config *Config) (*Courier, error) {
 	}, nil
 }
 
-// Put puts a value into the Cache and libri network.
+// Put puts a value into the Storage and libri network.
 func (c *Courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse, error) {
 	c.Logger.Debug("received Put request", zap.String(logKey, id.Hex(rq.Key)))
 	if err := api.ValidatePutRequest(rq); err != nil {
@@ -151,16 +151,16 @@ func (c *Courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 	}
 	docKey := id.FromBytes(rq.Key)
 
-	// check Cache for value
+	// check Storage for value
 	cachedDocBytes, err := c.cache.Get(docKey.String())
-	if err != nil && err != cache.ErrMissingValue {
+	if err != nil && err != storage.ErrMissingValue {
 		// unexpected error
 		return nil, err
 	}
 	newDocBytes, err := proto.Marshal(rq.Value)
 	cerrors.MaybePanic(err) // should never happen since we just unmarshaled from wire
 	if cachedDocBytes != nil {
-		// Cache has doc
+		// Storage has doc
 		if !bytes.Equal(newDocBytes, cachedDocBytes) {
 			// *should* never happen, but check just in case
 			return nil, ErrExistingNotEqualNewDocument
@@ -170,7 +170,7 @@ func (c *Courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 		return rp, nil
 	}
 
-	// Cache doesn't have doc, so add it
+	// Storage doesn't have doc, so add it
 	if err = c.cache.Put(docKey.String(), newDocBytes); err != nil {
 		return nil, err
 	}
@@ -215,7 +215,7 @@ func (c *Courier) maybeAddLibriPutQueue(key string) error {
 	}
 }
 
-// Get retrieves a value from the Cache or libri network, if it exists.
+// Get retrieves a value from the Storage or libri network, if it exists.
 func (c *Courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse, error) {
 	c.Logger.Debug("received Get request", zap.String(logKey, id.Hex(rq.Key)))
 	if err := api.ValidateGetRequest(rq); err != nil {
@@ -224,12 +224,12 @@ func (c *Courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse
 
 	docKey := id.FromBytes(rq.Key)
 	docBytes, err := c.cache.Get(docKey.String())
-	if err != nil && err != cache.ErrMissingValue {
+	if err != nil && err != storage.ErrMissingValue {
 		// unexpected error
 		return nil, err
 	}
 	if err == nil {
-		// Cache has doc
+		// Storage has doc
 		doc := &libriapi.Document{}
 		if err = proto.Unmarshal(docBytes, doc); err != nil {
 			return nil, err
@@ -238,7 +238,7 @@ func (c *Courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse
 		return &api.GetResponse{Value: doc}, nil
 	}
 
-	// Cache doesn't have value, so try to get it from libri
+	// Storage doesn't have value, so try to get it from libri
 	doc, err := c.libriAcquirer.Acquire(docKey, nil, c.libriGetter)
 	if err != nil && err != libriapi.ErrMissingDocument {
 		return nil, err

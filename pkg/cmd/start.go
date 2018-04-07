@@ -8,8 +8,8 @@ import (
 	cerrors "github.com/drausin/libri/libri/common/errors"
 	lserver "github.com/drausin/libri/libri/common/logging"
 	"github.com/drausin/libri/libri/common/parse"
-	"github.com/elixirhealth/courier/pkg/cache"
 	"github.com/elixirhealth/courier/pkg/server"
+	"github.com/elixirhealth/courier/pkg/server/storage"
 	bserver "github.com/elixirhealth/service-base/pkg/server"
 	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
 	"github.com/pkg/errors"
@@ -47,7 +47,7 @@ var (
 	errMissingCatalog            = errors.New("missing catalog address")
 	errMissingKey                = errors.New("missing key address")
 	errMultipleCacheStorageTypes = errors.New("multiple cache storage types specified")
-	errNoCacheStorageType        = errors.New("no cache storage type specified")
+	errNoStorageType             = errors.New("no cache storage type specified")
 )
 
 var startCmd = &cobra.Command{
@@ -89,13 +89,13 @@ func init() {
 		"cache uses in-memory storage")
 	startCmd.Flags().Bool(cacheDataStoreStorageFlag, false,
 		"cache uses GCP DataStore storage")
-	startCmd.Flags().Int(cacheRecentWindowDaysFlag, cache.DefaultRecentWindowDays,
+	startCmd.Flags().Int(cacheRecentWindowDaysFlag, storage.DefaultRecentWindowDays,
 		"recent past window in which cache entries are never evicted")
-	startCmd.Flags().Uint(cacheLRUSizeFlag, cache.DefaultLRUCacheSize,
+	startCmd.Flags().Uint(cacheLRUSizeFlag, storage.DefaultLRUCacheSize,
 		"size of LRU cache before recent window")
-	startCmd.Flags().Uint(cacheEvictionBatchSizeFlag, cache.DefaultEvictionBatchSize,
+	startCmd.Flags().Uint(cacheEvictionBatchSizeFlag, storage.DefaultEvictionBatchSize,
 		"size of each batch of evictions")
-	startCmd.Flags().Duration(cacheEvictionPeriodFlag, cache.DefaultEvictionPeriod,
+	startCmd.Flags().Duration(cacheEvictionPeriodFlag, storage.DefaultEvictionPeriod,
 		"period between evictions")
 	startCmd.Flags().String(catalogFlag, "",
 		"catalog service address")
@@ -146,7 +146,7 @@ func getCourierConfig() (*server.Config, error) {
 		return nil, err
 	}
 
-	cacheConfig := cache.NewDefaultParameters()
+	cacheConfig := storage.NewDefaultParameters()
 	cacheConfig.Type = cacheStorage
 	cacheConfig.RecentWindowDays = viper.GetInt(cacheRecentWindowDaysFlag)
 	cacheConfig.LRUCacheSize = uint(viper.GetInt(cacheLRUSizeFlag))
@@ -189,5 +189,5 @@ func getCacheStorageType() (bstorage.Type, error) {
 	if viper.GetBool(cacheDataStoreStorageFlag) {
 		return bstorage.DataStore, nil
 	}
-	return bstorage.Unspecified, errNoCacheStorageType
+	return bstorage.Unspecified, errNoStorageType
 }

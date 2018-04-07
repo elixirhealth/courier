@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/drausin/libri/libri/common/subscribe"
-	"github.com/elixirhealth/courier/pkg/cache"
+	"github.com/elixirhealth/courier/pkg/server/storage"
 	"github.com/elixirhealth/service-base/pkg/server"
 	"go.uber.org/zap/zapcore"
 )
@@ -69,7 +69,7 @@ type Config struct {
 	KeyGetTimeout time.Duration
 
 	GCPProjectID string
-	Cache        *cache.Parameters
+	Storage      *storage.Parameters
 }
 
 // NewDefaultConfig create a new config instance with default values.
@@ -87,7 +87,7 @@ func NewDefaultConfig() *Config {
 		WithDefaultCatalogPutQueueSize().
 		WithDefaultNCatalogPutters().
 		WithDefaultKeyGetTimeout().
-		WithDefaultCache()
+		WithDefaultStorage()
 }
 
 // MarshalLogObject writes the config to the given object encoder.
@@ -121,7 +121,7 @@ func (c *Config) MarshalLogObject(oe zapcore.ObjectEncoder) error {
 	if c.GCPProjectID != "" {
 		oe.AddString(logGCPProjectID, c.GCPProjectID)
 	}
-	if err := oe.AddObject(logCache, c.Cache); err != nil {
+	if err := oe.AddObject(logStorage, c.Storage); err != nil {
 		return err
 	}
 	return nil
@@ -274,17 +274,17 @@ func (c *Config) WithGCPProjectID(id string) *Config {
 }
 
 // WithCache sets the cache parameters to the given value or the defaults if it is nil.
-func (c *Config) WithCache(p *cache.Parameters) *Config {
+func (c *Config) WithCache(p *storage.Parameters) *Config {
 	if p == nil {
-		return c.WithDefaultCache()
+		return c.WithDefaultStorage()
 	}
-	c.Cache = p
+	c.Storage = p
 	return c
 }
 
-// WithDefaultCache set the Cache parameters to their default values.
-func (c *Config) WithDefaultCache() *Config {
-	c.Cache = cache.NewDefaultParameters()
+// WithDefaultStorage set the Storage parameters to their default values.
+func (c *Config) WithDefaultStorage() *Config {
+	c.Storage = storage.NewDefaultParameters()
 	return c
 }
 

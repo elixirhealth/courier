@@ -2,7 +2,9 @@ package server
 
 import (
 	"github.com/drausin/libri/libri/common/ecid"
-	"github.com/elixirhealth/courier/pkg/cache"
+	"github.com/elixirhealth/courier/pkg/server/storage"
+	"github.com/elixirhealth/courier/pkg/server/storage/datastore"
+	"github.com/elixirhealth/courier/pkg/server/storage/memory"
 	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -20,16 +22,16 @@ func getClientID(config *Config) (ecid.ID, error) {
 	return ecid.NewRandom(), nil
 }
 
-func getCache(config *Config, logger *zap.Logger) (cache.Cache, cache.AccessRecorder, error) {
-	switch config.Cache.Type {
+func getCache(config *Config, logger *zap.Logger) (storage.Cache, storage.AccessRecorder, error) {
+	switch config.Storage.Type {
 	case bstorage.DataStore:
-		c, ar, err := cache.NewDatastore(config.GCPProjectID, config.Cache, logger)
+		c, ar, err := datastore.New(config.GCPProjectID, config.Storage, logger)
 		if err != nil {
 			return nil, nil, err
 		}
 		return c, ar, nil
 	case bstorage.Memory:
-		c, ar := cache.NewMemory(config.Cache, logger)
+		c, ar := memory.New(config.Storage, logger)
 		return c, ar, nil
 	default:
 		return nil, nil, ErrInvalidCacheStorageType
