@@ -77,6 +77,7 @@ name="catalog-0"
 docker run --name "${name}" --net=courier -d -p ${port}:${port} ${CATALOG_IMAGE} \
     start \
     --logLevel "${CATALOG_LOG_LEVEL}" \
+    --storageMemory \
     --serverPort ${port}
 catalog_addr="${name}:${port}"
 catalog_containers="${name}"
@@ -85,7 +86,6 @@ echo
 echo "testing catalog health..."
 docker run --rm --net=courier ${CATALOG_IMAGE} test health \
     --catalogs "${catalog_addr}" \
-    --storageMemory \
     --logLevel "${CATALOG_LOG_LEVEL}"
 
 echo
