@@ -140,7 +140,7 @@ func TestMemoryCache_EvictNext_ok(t *testing.T) {
 	assert.Nil(t, err)
 
 	assert.Len(t, c.docs, 1)
-	assert.Equal(t, evictionKeys, ar.evictKeys)
+	assert.Equal(t, evictionKeys, ar.cacheEvictKeys)
 }
 
 func TestMemoryCache_EvictNext_err(t *testing.T) {
@@ -159,7 +159,7 @@ func TestMemoryCache_EvictNext_err(t *testing.T) {
 	// check ar.Evict error bubbes up
 	ar = &fixedAccessRecorder{
 		nextEvictions: []string{"key1", "key2"},
-		evictErr:      errors.New("some evict error"),
+		cacheEvictErr: errors.New("some evict error"),
 	}
 	c = &cache{
 		ar:     ar,
@@ -381,12 +381,11 @@ func TestMemoryAccessRecorder_Evict_err(t *testing.T) {
 type fixedAccessRecorder struct {
 	cachePutErr         error
 	cacheGetErr         error
-	cacheEvict          error
+	cacheEvictErr       error
+	cacheEvictKeys      []string
 	libriPutErr         error
 	nextEvictions       []string
 	getEvictionBatchErr error
-	evictErr            error
-	evictKeys           []string
 }
 
 func (r *fixedAccessRecorder) CachePut(key string) error {
@@ -398,7 +397,8 @@ func (r *fixedAccessRecorder) CacheGet(key string) error {
 }
 
 func (r *fixedAccessRecorder) CacheEvict(keys []string) error {
-	return r.cacheEvict
+	r.cacheEvictKeys = keys
+	return r.cacheEvictErr
 }
 
 func (r *fixedAccessRecorder) LibriPut(key string) error {

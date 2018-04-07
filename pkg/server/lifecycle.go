@@ -200,7 +200,6 @@ func (c *Courier) startCatalogPutters() {
 				if c.BaseServer.State() >= server.Stopping {
 					return
 				}
-				// TODO (drausin) get from catalog first and only put if doesn't exist
 				err := c.putCatalog(&catalogapi.PublicationReceipt{
 					EnvelopeKey:     pub.EnvelopeKey,
 					EntryKey:        pub.EntryKey,

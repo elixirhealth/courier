@@ -220,7 +220,7 @@ func TestDatastoreCache_EvictNext_ok(t *testing.T) {
 		datastore.NameKey(documentKind, "key2", nil),
 	}
 	assert.Equal(t, expectedDeleteKeys, dsClient.deleteKeys)
-	assert.Equal(t, evictionKeys, ar.evictKeys)
+	assert.Equal(t, evictionKeys, ar.cacheEvictKeys)
 }
 
 func TestDatastoreCache_EvictNext_err(t *testing.T) {
@@ -242,7 +242,7 @@ func TestDatastoreCache_EvictNext_err(t *testing.T) {
 		client: dsClient,
 		accessRecorder: &fixedAccessRecorder{
 			nextEvictions: []string{"key1", "key2"},
-			evictErr:      errors.New("some evict error"),
+			cacheEvictErr: errors.New("some evict error"),
 		},
 		logger: lg,
 	}
@@ -659,12 +659,11 @@ func (f *fixedDatastoreIterator) Next(dst interface{}) (*datastore.Key, error) {
 type fixedAccessRecorder struct {
 	cachePutErr         error
 	cacheGetErr         error
-	cacheEvict          error
+	cacheEvictErr       error
+	cacheEvictKeys      []string
 	libriPutErr         error
 	nextEvictions       []string
 	getEvictionBatchErr error
-	evictErr            error
-	evictKeys           []string
 }
 
 func (r *fixedAccessRecorder) CachePut(key string) error {
@@ -676,7 +675,8 @@ func (r *fixedAccessRecorder) CacheGet(key string) error {
 }
 
 func (r *fixedAccessRecorder) CacheEvict(keys []string) error {
-	return r.cacheEvict
+	r.cacheEvictKeys = keys
+	return r.cacheEvictErr
 }
 
 func (r *fixedAccessRecorder) LibriPut(key string) error {
