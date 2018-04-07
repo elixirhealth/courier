@@ -1,4 +1,4 @@
-package storage
+package datastore
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/drausin/libri/libri/common/id"
+	"github.com/elixirhealth/courier/pkg/server/storage"
 	"github.com/elixirhealth/service-base/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -24,12 +25,12 @@ func TestDatastoreCache_PutGet_ok(t *testing.T) {
 
 	for _, valueSize := range valueSizes {
 		accessRecorderDSClient := &fixedDatastoreClient{}
-		ds := datastoreCache{
-			params: NewDefaultParameters(),
+		ds := cache{
+			params: storage.NewDefaultParameters(),
 			client: &fixedDatastoreClient{},
 			logger: lg,
-			accessRecorder: &datastoreAccessRecorder{
-				params: NewDefaultParameters(),
+			accessRecorder: &accessRecorder{
+				params: storage.NewDefaultParameters(),
 				client: accessRecorderDSClient,
 				logger: lg,
 			},
@@ -45,7 +46,7 @@ func TestDatastoreCache_PutGet_ok(t *testing.T) {
 		assert.Nil(t, err)
 
 		// check this internal side effect b/c it is important for eviction
-		accessLogValue1 := accessRecorderDSClient.value.(*AccessRecord)
+		accessLogValue1 := accessRecorderDSClient.value.(*storage.AccessRecord)
 		assert.NotZero(t, accessLogValue1.CachePutTimeEarliest)
 		assert.Zero(t, accessLogValue1.LibriPutTimeEarliest)
 		assert.Zero(t, accessLogValue1.CacheGetTimeLatest)
@@ -55,7 +56,7 @@ func TestDatastoreCache_PutGet_ok(t *testing.T) {
 		assert.Equal(t, value1, value2)
 
 		// check side effect again
-		accessLogValue2 := accessRecorderDSClient.value.(*AccessRecord)
+		accessLogValue2 := accessRecorderDSClient.value.(*storage.AccessRecord)
 		assert.NotZero(t, accessLogValue2.CachePutTimeEarliest)
 		assert.Equal(t, accessLogValue1.CachePutTimeEarliest, accessLogValue2.CachePutTimeEarliest)
 		assert.Zero(t, accessLogValue2.LibriPutTimeEarliest)
@@ -67,19 +68,19 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
 	lg := zap.NewNop()
 
-	// bad key
-	ds := &datastoreCache{
-		params:         NewDefaultParameters(),
+	// bad Key
+	ds := &cache{
+		params:         storage.NewDefaultParameters(),
 		client:         &fixedDatastoreClient{},
 		accessRecorder: &fixedAccessRecorder{},
 		logger:         lg,
 	}
-	err := ds.Put("too short key", []byte{})
-	assert.Equal(t, ErrInvalidKeySize, err)
+	err := ds.Put("too short Key", []byte{})
+	assert.Equal(t, storage.ErrInvalidKeySize, err)
 
 	// get error
-	ds = &datastoreCache{
-		params: NewDefaultParameters(),
+	ds = &cache{
+		params: storage.NewDefaultParameters(),
 		client: &fixedDatastoreClient{
 			getErr: errors.New("some get error"),
 		},
@@ -90,9 +91,9 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 	err = ds.Put(key, []byte{})
 	assert.NotNil(t, err)
 
-	// different values for same key
-	ds = &datastoreCache{
-		params:         NewDefaultParameters(),
+	// different values for same Key
+	ds = &cache{
+		params:         storage.NewDefaultParameters(),
 		client:         &fixedDatastoreClient{},
 		accessRecorder: &fixedAccessRecorder{},
 		logger:         lg,
@@ -100,21 +101,21 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 	err = ds.Put(key, []byte("value 1"))
 	assert.Nil(t, err)
 	err = ds.Put(key, []byte("value 2"))
-	assert.Equal(t, ErrExistingNotEqualNewValue, err)
+	assert.Equal(t, storage.ErrExistingNotEqualNewValue, err)
 
 	// value too large
-	ds = &datastoreCache{
-		params:         NewDefaultParameters(),
+	ds = &cache{
+		params:         storage.NewDefaultParameters(),
 		client:         &fixedDatastoreClient{},
 		accessRecorder: &fixedAccessRecorder{},
 		logger:         lg,
 	}
 	err = ds.Put(key, util.RandBytes(rng, 3.5*1024*1024))
-	assert.Equal(t, ErrValueTooLarge, err)
+	assert.Equal(t, storage.ErrValueTooLarge, err)
 
 	// doc put error
-	ds = &datastoreCache{
-		params: NewDefaultParameters(),
+	ds = &cache{
+		params: storage.NewDefaultParameters(),
 		client: &fixedDatastoreClient{
 			putErr: errors.New("some put error"),
 		},
@@ -125,8 +126,8 @@ func TestDatastoreCache_Put_err(t *testing.T) {
 	assert.NotNil(t, err)
 
 	// access recorder error
-	ds = &datastoreCache{
-		params: NewDefaultParameters(),
+	ds = &cache{
+		params: storage.NewDefaultParameters(),
 		client: &fixedDatastoreClient{},
 		accessRecorder: &fixedAccessRecorder{
 			cachePutErr: errors.New("some put error"),
@@ -142,8 +143,8 @@ func TestDatastoreCache_Get_err(t *testing.T) {
 	lg := zap.NewNop()
 
 	// missing doc error
-	ds := &datastoreCache{
-		params: NewDefaultParameters(),
+	ds := &cache{
+		params: storage.NewDefaultParameters(),
 		client: &fixedDatastoreClient{
 			getErr: datastore.ErrNoSuchEntity,
 		},
@@ -152,12 +153,12 @@ func TestDatastoreCache_Get_err(t *testing.T) {
 	}
 	key := fmt.Sprintf("%x", util.RandBytes(rng, id.Length))
 	docBytes, err := ds.Get(key)
-	assert.Equal(t, ErrMissingValue, err)
+	assert.Equal(t, storage.ErrMissingValue, err)
 	assert.Nil(t, docBytes)
 
 	// other doc get error
-	ds = &datastoreCache{
-		params: NewDefaultParameters(),
+	ds = &cache{
+		params: storage.NewDefaultParameters(),
 		client: &fixedDatastoreClient{
 			getErr: errors.New("some get error"),
 		},
@@ -170,8 +171,8 @@ func TestDatastoreCache_Get_err(t *testing.T) {
 	assert.Nil(t, docBytes)
 
 	// access recorder error
-	ds = &datastoreCache{
-		params: NewDefaultParameters(),
+	ds = &cache{
+		params: storage.NewDefaultParameters(),
 		client: &fixedDatastoreClient{
 			value: &MarshaledDocument{
 				ValuePart1: []byte("some document"),
@@ -193,8 +194,8 @@ func TestDatastoreCache_EvictNext_ok(t *testing.T) {
 	ar := &fixedAccessRecorder{
 		nextEvictions: []string{}, // nothing to evict
 	}
-	dc := &datastoreCache{
-		params:         NewDefaultParameters(),
+	dc := &cache{
+		params:         storage.NewDefaultParameters(),
 		client:         dsClient,
 		accessRecorder: ar,
 		logger:         lg,
@@ -206,8 +207,8 @@ func TestDatastoreCache_EvictNext_ok(t *testing.T) {
 	ar = &fixedAccessRecorder{
 		nextEvictions: evictionKeys,
 	}
-	dc = &datastoreCache{
-		params:         NewDefaultParameters(),
+	dc = &cache{
+		params:         storage.NewDefaultParameters(),
 		client:         dsClient,
 		accessRecorder: ar,
 		logger:         lg,
@@ -225,8 +226,8 @@ func TestDatastoreCache_EvictNext_ok(t *testing.T) {
 func TestDatastoreCache_EvictNext_err(t *testing.T) {
 	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{}
-	dc := &datastoreCache{
-		params: NewDefaultParameters(),
+	dc := &cache{
+		params: storage.NewDefaultParameters(),
 		client: dsClient,
 		accessRecorder: &fixedAccessRecorder{
 			getEvictionBatchErr: errors.New("some getEvictionBatch error"),
@@ -236,8 +237,8 @@ func TestDatastoreCache_EvictNext_err(t *testing.T) {
 	err := dc.EvictNext()
 	assert.NotNil(t, err)
 
-	dc = &datastoreCache{
-		params: NewDefaultParameters(),
+	dc = &cache{
+		params: storage.NewDefaultParameters(),
 		client: dsClient,
 		accessRecorder: &fixedAccessRecorder{
 			nextEvictions: []string{"key1", "key2"},
@@ -248,8 +249,8 @@ func TestDatastoreCache_EvictNext_err(t *testing.T) {
 	err = dc.EvictNext()
 	assert.NotNil(t, err)
 
-	dc = &datastoreCache{
-		params: NewDefaultParameters(),
+	dc = &cache{
+		params: storage.NewDefaultParameters(),
 		client: &fixedDatastoreClient{
 			deleteErr: errors.New("some delete error"),
 		},
@@ -265,21 +266,21 @@ func TestDatastoreCache_EvictNext_err(t *testing.T) {
 func TestDatastoreAccessRecorder_CachePut_ok(t *testing.T) {
 	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{}
-	ds := &datastoreAccessRecorder{
-		params: NewDefaultParameters(),
+	ds := &accessRecorder{
+		params: storage.NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
-	err := ds.CachePut("some key")
+	err := ds.CachePut("some Key")
 	assert.Nil(t, err)
-	assert.NotZero(t, dsClient.value.(*AccessRecord).CachePutDateEarliest)
-	assert.NotZero(t, dsClient.value.(*AccessRecord).CachePutTimeEarliest)
-	assert.Zero(t, dsClient.value.(*AccessRecord).LibriPutTimeEarliest)
-	assert.Zero(t, dsClient.value.(*AccessRecord).CacheGetTimeLatest)
-	assert.False(t, dsClient.value.(*AccessRecord).LibriPutOccurred)
+	assert.NotZero(t, dsClient.value.(*storage.AccessRecord).CachePutDateEarliest)
+	assert.NotZero(t, dsClient.value.(*storage.AccessRecord).CachePutTimeEarliest)
+	assert.Zero(t, dsClient.value.(*storage.AccessRecord).LibriPutTimeEarliest)
+	assert.Zero(t, dsClient.value.(*storage.AccessRecord).CacheGetTimeLatest)
+	assert.False(t, dsClient.value.(*storage.AccessRecord).LibriPutOccurred)
 
 	// second put should be no-op
-	err = ds.CachePut("some key")
+	err = ds.CachePut("some Key")
 	assert.Nil(t, err)
 }
 
@@ -288,66 +289,66 @@ func TestDatastoreAccessRecorder_CachePut_err(t *testing.T) {
 	dsClient := &fixedDatastoreClient{
 		getErr: errors.New("some get error"),
 	}
-	ds := datastoreAccessRecorder{
-		params: NewDefaultParameters(),
+	ds := accessRecorder{
+		params: storage.NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
-	err := ds.CachePut("some key")
+	err := ds.CachePut("some Key")
 	assert.NotNil(t, err)
 
 	dsClient = &fixedDatastoreClient{
 		putErr: errors.New("some put error"),
 	}
-	ds = datastoreAccessRecorder{
-		params: NewDefaultParameters(),
+	ds = accessRecorder{
+		params: storage.NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
-	err = ds.CachePut("some key")
+	err = ds.CachePut("some Key")
 	assert.NotNil(t, err)
 }
 
 func TestDatastoreAccessRecorder_CacheGet(t *testing.T) {
 	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{
-		value: &AccessRecord{CachePutTimeEarliest: time.Now()},
+		value: &storage.AccessRecord{CachePutTimeEarliest: time.Now()},
 	}
-	ds := datastoreAccessRecorder{
-		params: NewDefaultParameters(),
+	ds := accessRecorder{
+		params: storage.NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
-	err := ds.CacheGet("some key")
+	err := ds.CacheGet("some Key")
 	assert.Nil(t, err)
-	assert.NotZero(t, dsClient.value.(*AccessRecord).CachePutTimeEarliest)
-	assert.Zero(t, dsClient.value.(*AccessRecord).LibriPutTimeEarliest)
-	assert.NotZero(t, dsClient.value.(*AccessRecord).CacheGetTimeLatest)
+	assert.NotZero(t, dsClient.value.(*storage.AccessRecord).CachePutTimeEarliest)
+	assert.Zero(t, dsClient.value.(*storage.AccessRecord).LibriPutTimeEarliest)
+	assert.NotZero(t, dsClient.value.(*storage.AccessRecord).CacheGetTimeLatest)
 }
 
 func TestDatastoreAccessRecorder_LibriPut(t *testing.T) {
 	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{
-		value: &AccessRecord{CachePutTimeEarliest: time.Now()},
+		value: &storage.AccessRecord{CachePutTimeEarliest: time.Now()},
 	}
-	ds := datastoreAccessRecorder{
-		params: NewDefaultParameters(),
+	ds := accessRecorder{
+		params: storage.NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
-	err := ds.LibriPut("some key")
+	err := ds.LibriPut("some Key")
 	assert.Nil(t, err)
-	assert.NotZero(t, dsClient.value.(*AccessRecord).CachePutTimeEarliest)
-	assert.NotZero(t, dsClient.value.(*AccessRecord).LibriPutTimeEarliest)
-	assert.True(t, dsClient.value.(*AccessRecord).LibriPutOccurred)
-	assert.Zero(t, dsClient.value.(*AccessRecord).CacheGetTimeLatest)
+	assert.NotZero(t, dsClient.value.(*storage.AccessRecord).CachePutTimeEarliest)
+	assert.NotZero(t, dsClient.value.(*storage.AccessRecord).LibriPutTimeEarliest)
+	assert.True(t, dsClient.value.(*storage.AccessRecord).LibriPutOccurred)
+	assert.Zero(t, dsClient.value.(*storage.AccessRecord).CacheGetTimeLatest)
 }
 
 func TestDatastoreAccessRecorder_CacheEvict_ok(t *testing.T) {
 	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{}
-	ds := datastoreAccessRecorder{
-		params: NewDefaultParameters(),
+	ds := accessRecorder{
+		params: storage.NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
@@ -366,8 +367,8 @@ func TestDatastoreAccessRecorder_CacheEvict_err(t *testing.T) {
 	dsClient := &fixedDatastoreClient{
 		deleteErr: errors.New("some delete error"),
 	}
-	ds := datastoreAccessRecorder{
-		params: NewDefaultParameters(),
+	ds := accessRecorder{
+		params: storage.NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
@@ -378,7 +379,7 @@ func TestDatastoreAccessRecorder_CacheEvict_err(t *testing.T) {
 
 func TestDatastoreAccessRecorder_GetNextEvictions_ok(t *testing.T) {
 	lg := zap.NewNop()
-	params := &Parameters{
+	params := &storage.Parameters{
 		RecentWindowDays:  1,
 		LRUCacheSize:      2,
 		EvictionBatchSize: 2,
@@ -395,11 +396,11 @@ func TestDatastoreAccessRecorder_GetNextEvictions_ok(t *testing.T) {
 		countValue: 8,
 	}
 	now := time.Now()
-	ds := datastoreAccessRecorder{
+	ds := accessRecorder{
 		client: dsClient,
 		iter: &fixedDatastoreIterator{
 			keys: dsKeys,
-			values: []*AccessRecord{
+			values: []*storage.AccessRecord{
 				{CacheGetTimeLatest: now.Add(1 * time.Second)},
 				{CacheGetTimeLatest: now.Add(2 * time.Second)},
 				{CacheGetTimeLatest: now.Add(3 * time.Second)},
@@ -419,7 +420,7 @@ func TestDatastoreAccessRecorder_GetNextEvictions_ok(t *testing.T) {
 		runResult:  &datastore.Iterator{},
 		countValue: 2,
 	}
-	ds = datastoreAccessRecorder{
+	ds = accessRecorder{
 		client: dsClient,
 		params: params,
 		logger: lg,
@@ -431,7 +432,7 @@ func TestDatastoreAccessRecorder_GetNextEvictions_ok(t *testing.T) {
 
 func TestDatastoreAccessRecorder_GetNextEvictions_err(t *testing.T) {
 	lg := zap.NewNop()
-	params := &Parameters{
+	params := &storage.Parameters{
 		RecentWindowDays:  1,
 		LRUCacheSize:      2,
 		EvictionBatchSize: 3,
@@ -441,7 +442,7 @@ func TestDatastoreAccessRecorder_GetNextEvictions_err(t *testing.T) {
 	dsClient := &fixedDatastoreClient{
 		countErr: errors.New("some count error"),
 	}
-	ds := datastoreAccessRecorder{
+	ds := accessRecorder{
 		client: dsClient,
 		params: params,
 		logger: lg,
@@ -454,7 +455,7 @@ func TestDatastoreAccessRecorder_GetNextEvictions_err(t *testing.T) {
 	dsClient = &fixedDatastoreClient{
 		countValue: 4,
 	}
-	ds = datastoreAccessRecorder{
+	ds = accessRecorder{
 		client: dsClient,
 		iter: &fixedDatastoreIterator{
 			err: errors.New("some iter error"),
@@ -470,8 +471,8 @@ func TestDatastoreAccessRecorder_GetNextEvictions_err(t *testing.T) {
 func TestDatastoreAccessRecorder_Evict_ok(t *testing.T) {
 	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{}
-	ds := datastoreAccessRecorder{
-		params: NewDefaultParameters(),
+	ds := accessRecorder{
+		params: storage.NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
@@ -491,8 +492,8 @@ func TestDatastoreAccessRecorder_Evict_err(t *testing.T) {
 	dsClient := &fixedDatastoreClient{
 		deleteErr: errors.New("some delete error"),
 	}
-	ds := datastoreAccessRecorder{
-		params: NewDefaultParameters(),
+	ds := accessRecorder{
+		params: storage.NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
@@ -503,28 +504,28 @@ func TestDatastoreAccessRecorder_Evict_err(t *testing.T) {
 
 func TestDatastoreAccessRecorder_update_err(t *testing.T) {
 	lg := zap.NewNop()
-	// no log for given key
+	// no log for given Key
 	dsClient := &fixedDatastoreClient{
 		getErr: datastore.ErrNoSuchEntity,
 	}
-	ds := datastoreAccessRecorder{
-		params: NewDefaultParameters(),
+	ds := accessRecorder{
+		params: storage.NewDefaultParameters(),
 		client: dsClient,
 	}
-	err := ds.LibriPut("some key without log")
+	err := ds.LibriPut("some Key without log")
 	assert.Equal(t, datastore.ErrNoSuchEntity, err)
 
 	// put error
 	dsClient = &fixedDatastoreClient{
-		value:  &AccessRecord{CachePutTimeEarliest: time.Now()},
+		value:  &storage.AccessRecord{CachePutTimeEarliest: time.Now()},
 		putErr: errors.New("some put error"),
 	}
-	ds = datastoreAccessRecorder{
-		params: NewDefaultParameters(),
+	ds = accessRecorder{
+		params: storage.NewDefaultParameters(),
 		client: dsClient,
 		logger: lg,
 	}
-	err = ds.LibriPut("some key")
+	err = ds.LibriPut("some Key")
 	assert.NotNil(t, err)
 }
 
@@ -560,7 +561,7 @@ func TestSplitJoinValue(t *testing.T) {
 
 	value1 = util.RandBytes(rng, maxValuePartSize*3.5)
 	split, err = splitValue(value1)
-	assert.Equal(t, ErrValueTooLarge, err)
+	assert.Equal(t, storage.ErrValueTooLarge, err)
 	assert.Nil(t, split)
 }
 
@@ -610,11 +611,12 @@ func (f *fixedDatastoreClient) Get(
 	if f.value == nil {
 		return datastore.ErrNoSuchEntity
 	} else if key.Kind == accessRecordKind {
-		dest.(*AccessRecord).CacheGetTimeLatest = f.value.(*AccessRecord).CacheGetTimeLatest
-		dest.(*AccessRecord).CachePutTimeEarliest =
-			f.value.(*AccessRecord).CachePutTimeEarliest
-		dest.(*AccessRecord).LibriPutTimeEarliest =
-			f.value.(*AccessRecord).LibriPutTimeEarliest
+		dest.(*storage.AccessRecord).CacheGetTimeLatest =
+			f.value.(*storage.AccessRecord).CacheGetTimeLatest
+		dest.(*storage.AccessRecord).CachePutTimeEarliest =
+			f.value.(*storage.AccessRecord).CachePutTimeEarliest
+		dest.(*storage.AccessRecord).LibriPutTimeEarliest =
+			f.value.(*storage.AccessRecord).LibriPutTimeEarliest
 	} else if key.Kind == documentKind {
 		dest.(*MarshaledDocument).ValuePart1 = f.value.(*MarshaledDocument).ValuePart1
 		dest.(*MarshaledDocument).ValuePart2 = f.value.(*MarshaledDocument).ValuePart2
@@ -636,7 +638,7 @@ func (f *fixedDatastoreClient) Run(ctx context.Context, q *datastore.Query) *dat
 type fixedDatastoreIterator struct {
 	err    error
 	keys   []*datastore.Key
-	values []*AccessRecord
+	values []*storage.AccessRecord
 	offset int
 }
 
@@ -650,7 +652,7 @@ func (f *fixedDatastoreIterator) Next(dst interface{}) (*datastore.Key, error) {
 	if f.offset == len(f.values) {
 		return nil, iterator.Done
 	}
-	dst.(*AccessRecord).CacheGetTimeLatest = f.values[f.offset].CacheGetTimeLatest
+	dst.(*storage.AccessRecord).CacheGetTimeLatest = f.values[f.offset].CacheGetTimeLatest
 	return f.keys[f.offset], nil
 }
 

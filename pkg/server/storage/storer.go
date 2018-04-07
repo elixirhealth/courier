@@ -1,8 +1,10 @@
 package storage
 
 import (
+	"errors"
 	"time"
 
+	"github.com/drausin/libri/libri/common/id"
 	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
 	"go.uber.org/zap/zapcore"
 )
@@ -28,15 +30,37 @@ const (
 
 	// DefaultCRUDTimeout is the default timeout for get, put, and delete DataStore operations.
 	DefaultCRUDTimeout = 1 * time.Second
+
+	// KeySize is size of the hex length of a document ID
+	KeySize = 2 * id.Length
+
+	// SecsPerDay is the number of seconds in a day.
+	SecsPerDay = 60 * 60 * 24
+)
+
+var (
+	// ErrMissingValue indicates that a value is missing for a given Key.
+	ErrMissingValue = errors.New("missing value")
+
+	// ErrInvalidKeySize indicates when the Key is not the expected length.
+	ErrInvalidKeySize = errors.New("invalid Key size")
+
+	// ErrValueTooLarge indicates when the value is too large to be stored.
+	ErrValueTooLarge = errors.New("value too large")
+
+	// ErrExistingNotEqualNewValue indicates when the existing stored value is not the same as
+	// the new value,
+	// violating the cache's immutability assumption.
+	ErrExistingNotEqualNewValue = errors.New("existing value does not equal new value")
 )
 
 // Cache stores documents in a quasi-LRU cache. Implementations of this interface define how the
 // bstorage layer works.
 type Cache interface {
-	// Put stores the marshaled document value at the hex of its key.
+	// Put stores the marshaled document value at the hex of its Key.
 	Put(key string, value []byte) error
 
-	// Get retrieves the marshaled document value of the given key.
+	// Get retrieves the marshaled document value of the given Key.
 	Get(key string) ([]byte, error)
 
 	// EvictNext removes the next batch of documents eligible for eviction from the cache.
@@ -46,10 +70,10 @@ type Cache interface {
 // AccessRecorder records put and get access to a particular document.
 type AccessRecorder interface {
 	// CachePut creates a new access record with the cache's put time for the document with
-	// the given key.
+	// the given Key.
 	CachePut(key string) error
 
-	// CacheGet updates the access record's latest get time for the document with the given key.
+	// CacheGet updates the access record's latest get time for the document with the given Key.
 	CacheGet(key string) error
 
 	// CacheEvict deletes the access record for the documents with the given keys.
@@ -121,12 +145,27 @@ type AccessRecord struct {
 	CacheGetTimeLatest   time.Time `datastore:"cache_get_time_latest,noindex"`
 }
 
-func newCachePutAccessRecord() *AccessRecord {
+// NewCachePutAccessRecord creates a new *AccessRecord representing a cache put.
+func NewCachePutAccessRecord() *AccessRecord {
 	now := time.Now()
 	return &AccessRecord{
-		CachePutDateEarliest: now.Unix() / secsPerDay,
+		CachePutDateEarliest: now.Unix() / SecsPerDay,
 		CachePutTimeEarliest: now,
 		LibriPutOccurred:     false,
+	}
+}
+
+// UpdateAccessRecord updates the existing access record with the non-zero values of a new access
+// record.
+func UpdateAccessRecord(existing, update *AccessRecord) {
+	if !update.CacheGetTimeLatest.IsZero() {
+		existing.CacheGetTimeLatest = update.CacheGetTimeLatest
+	}
+	if !update.LibriPutTimeEarliest.IsZero() {
+		existing.LibriPutTimeEarliest = update.LibriPutTimeEarliest
+	}
+	if update.LibriPutOccurred {
+		existing.LibriPutOccurred = update.LibriPutOccurred
 	}
 }
 
@@ -134,7 +173,7 @@ func newCachePutAccessRecord() *AccessRecord {
 func (r *AccessRecord) MarshalLogObject(oe zapcore.ObjectEncoder) error {
 	oe.AddInt64(logCachePutDateEarliest, r.CachePutDateEarliest)
 	oe.AddString(logCachePutDateEarliestISO,
-		time.Unix(r.CachePutDateEarliest*secsPerDay, 0).Format("2006-01-02"))
+		time.Unix(r.CachePutDateEarliest*SecsPerDay, 0).Format("2006-01-02"))
 	oe.AddTime(logCachePutTimeEarlist, r.CachePutTimeEarliest)
 	oe.AddBool(logLibriPutOccurred, r.LibriPutOccurred)
 	oe.AddTime(logLibriPutTimeEarliest, r.LibriPutTimeEarliest)
@@ -142,32 +181,38 @@ func (r *AccessRecord) MarshalLogObject(oe zapcore.ObjectEncoder) error {
 	return nil
 }
 
-// keyGetTimes is a max-heap of keyGetTime objects sorted by getTime
-type keyGetTimes []keyGetTime
-
-type keyGetTime struct {
-	key     string
-	getTime time.Time
+// KeyGetTime represents get access time for a given key.
+type KeyGetTime struct {
+	Key     string
+	GetTime time.Time
 }
 
-func (kgt keyGetTimes) Len() int {
+// KeyGetTimes is a max-heap of KeyGetTime objects sorted by GetTime
+type KeyGetTimes []KeyGetTime
+
+// Len is the number of key get times.
+func (kgt KeyGetTimes) Len() int {
 	return len(kgt)
 }
 
-func (kgt keyGetTimes) Less(i, j int) bool {
+// Less returns whether key get time i comes after that of j.
+func (kgt KeyGetTimes) Less(i, j int) bool {
 	// After instead of Before turns min-heap into max-heap
-	return kgt[i].getTime.After(kgt[j].getTime)
+	return kgt[i].GetTime.After(kgt[j].GetTime)
 }
 
-func (kgt keyGetTimes) Swap(i, j int) {
+// Swap swaps ket get times i & j.
+func (kgt KeyGetTimes) Swap(i, j int) {
 	kgt[i], kgt[j] = kgt[j], kgt[i]
 }
 
-func (kgt *keyGetTimes) Push(x interface{}) {
-	*kgt = append(*kgt, x.(keyGetTime))
+// Push adds a key get time to the heap.
+func (kgt *KeyGetTimes) Push(x interface{}) {
+	*kgt = append(*kgt, x.(KeyGetTime))
 }
 
-func (kgt *keyGetTimes) Pop() interface{} {
+// Pop removes and returns the key get time from the root of the heap.
+func (kgt *KeyGetTimes) Pop() interface{} {
 	old := *kgt
 	n := len(old)
 	x := old[n-1]
@@ -175,6 +220,7 @@ func (kgt *keyGetTimes) Pop() interface{} {
 	return x
 }
 
-func (kgt keyGetTimes) Peak() keyGetTime {
+// Peak returns the key get time from the root of the heap.
+func (kgt KeyGetTimes) Peak() KeyGetTime {
 	return kgt[0]
 }
