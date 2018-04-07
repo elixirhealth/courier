@@ -137,7 +137,7 @@ func (c *cache) EvictNext() error {
 	for i, keyName := range keyNames {
 		dsKeys[i] = datastore.NameKey(documentKind, keyName, nil)
 	}
-	if err = c.accessRecorder.Evict(keyNames); err != nil {
+	if err = c.accessRecorder.CacheEvict(keyNames); err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), c.params.DeleteTimeout)
@@ -262,20 +262,6 @@ func (r *accessRecorder) GetNextEvictions() ([]string, error) {
 	r.logger.Debug("found evictable values",
 		nextEvictionsFields(evict.Len(), r.params.LRUCacheSize)...)
 	return keyNames, nil
-}
-
-func (r *accessRecorder) Evict(keys []string) error {
-	dsKeys := make([]*datastore.Key, len(keys))
-	for i, keyName := range keys {
-		dsKeys[i] = datastore.NameKey(accessRecordKind, keyName, nil)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), r.params.DeleteTimeout)
-	defer cancel()
-	if err := r.client.Delete(ctx, dsKeys); err != nil {
-		return err
-	}
-	r.logger.Debug("evicted access records", zap.Int(logNEvicted, len(dsKeys)))
-	return nil
 }
 
 func (r *accessRecorder) update(key string, update *storage.AccessRecord) error {

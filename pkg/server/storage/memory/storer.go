@@ -83,7 +83,7 @@ func (c *cache) EvictNext() error {
 		c.logger.Debug("evicted no documents")
 		return nil
 	}
-	if err = c.ar.Evict(keys); err != nil {
+	if err = c.ar.CacheEvict(keys); err != nil {
 		return err
 	}
 	for _, key := range keys {
@@ -182,19 +182,6 @@ func (r *accessRecorder) GetNextEvictions() ([]string, error) {
 	r.logger.Debug("found evictable values",
 		nextEvictionsFields(evict.Len(), r.params.LRUCacheSize)...)
 	return evictKeys, nil
-}
-
-func (r *accessRecorder) Evict(keys []string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, key := range keys {
-		if _, in := r.records[key]; !in {
-			return storage.ErrMissingValue
-		}
-		delete(r.records, key)
-	}
-	r.logger.Debug("evicted access records", zap.Int(logNEvicted, len(keys)))
-	return nil
 }
 
 func (r *accessRecorder) update(key string, update *storage.AccessRecord) error {
