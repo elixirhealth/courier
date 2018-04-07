@@ -88,8 +88,6 @@ type AccessRecorder interface {
 	// - put into libri
 	// - gotten least recently
 	GetNextEvictions() ([]string, error)
-
-	Evict(keys []string) error
 }
 
 // Parameters defines the parameters used by the cache implementation.
