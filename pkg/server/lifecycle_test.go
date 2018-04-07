@@ -90,7 +90,7 @@ func TestCourier_startLibriPutter_ok(t *testing.T) {
 	c.accessRecorder = testAccessRecorder
 	testPub := &fixedPublisher{}
 	c.libriPublisher = testPub
-	c.libriPutQueue <- key.String()
+	c.libriPutQueue <- key.Bytes()
 	go c.Serve(func(s *grpc.Server) {}, func() {})
 	c.WaitUntilStarted()
 
@@ -123,7 +123,7 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	}
 	c.libriPublisher = testPub
 	for i := 0; i < libriPutterErrQueueSize; i++ {
-		c.libriPutQueue <- key.String()
+		c.libriPutQueue <- key.Bytes()
 	}
 	go c.Serve(func(s *grpc.Server) {}, func() {})
 	c.WaitUntilStarted()
@@ -136,7 +136,7 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	c.cache = &fixedCache{value: []byte{1, 2, 3, 4}}
 	c.libriPublisher = &fixedPublisher{}
 	for i := 0; i < libriPutterErrQueueSize; i++ {
-		c.libriPutQueue <- "some key"
+		c.libriPutQueue <- []byte{1, 1, 1}
 	}
 	go c.Serve(func(s *grpc.Server) {}, func() {})
 	c.WaitUntilStarted()
@@ -152,7 +152,7 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	c.cache = &fixedCache{value: docBytes}
 	c.libriPublisher = testPub
 	for i := 0; i < libriPutterErrQueueSize; i++ {
-		c.libriPutQueue <- "some key"
+		c.libriPutQueue <- []byte{1, 1, 1}
 	}
 	go c.Serve(func(s *grpc.Server) {}, func() {})
 	c.WaitUntilStarted()
@@ -174,7 +174,7 @@ func TestCourier_startLibriPutter_err(t *testing.T) {
 	}
 	c.accessRecorder = testAR
 	for i := 0; i < libriPutterErrQueueSize; i++ {
-		c.libriPutQueue <- "some key"
+		c.libriPutQueue <- []byte{1, 1, 1}
 	}
 	go c.Serve(func(s *grpc.Server) {}, func() {})
 	c.WaitUntilStarted()
@@ -359,29 +359,29 @@ type fixedAccessRecorder struct {
 	cacheGetErr         error
 	cacheEvict          error
 	libriPutErr         error
-	nextEvictions       []string
+	nextEvictions       [][]byte
 	getEvictionBatchErr error
 	nLibriPuts          uint
 	evictErr            error
 }
 
-func (r *fixedAccessRecorder) Evict(keys []string) error {
+func (r *fixedAccessRecorder) Evict(keys [][]byte) error {
 	return r.evictErr
 }
 
-func (r *fixedAccessRecorder) CachePut(key string) error {
+func (r *fixedAccessRecorder) CachePut(key []byte) error {
 	return r.cachePutErr
 }
 
-func (r *fixedAccessRecorder) CacheGet(key string) error {
+func (r *fixedAccessRecorder) CacheGet(key []byte) error {
 	return r.cacheGetErr
 }
 
-func (r *fixedAccessRecorder) CacheEvict(keys []string) error {
+func (r *fixedAccessRecorder) CacheEvict(keys [][]byte) error {
 	return r.cacheEvict
 }
 
-func (r *fixedAccessRecorder) LibriPut(key string) error {
+func (r *fixedAccessRecorder) LibriPut(key []byte) error {
 	if r.libriPutErr != nil {
 		return r.libriPutErr
 	}
@@ -389,7 +389,7 @@ func (r *fixedAccessRecorder) LibriPut(key string) error {
 	return nil
 }
 
-func (r *fixedAccessRecorder) GetNextEvictions() ([]string, error) {
+func (r *fixedAccessRecorder) GetNextEvictions() ([][]byte, error) {
 	return r.nextEvictions, r.getEvictionBatchErr
 }
 

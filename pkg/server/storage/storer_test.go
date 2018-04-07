@@ -20,12 +20,12 @@ func TestAccessRecord_MarshalLogObject(t *testing.T) {
 func TestKeyGetTimes(t *testing.T) {
 	now := time.Now()
 	x := &KeyGetTimes{
-		{Key: "b", GetTime: now.Add(2 * time.Second)},
-		{Key: "a", GetTime: now.Add(1 * time.Second)},
-		{Key: "c", GetTime: now.Add(3 * time.Second)},
+		{Key: []byte{2}, GetTime: now.Add(2 * time.Second)},
+		{Key: []byte{1}, GetTime: now.Add(1 * time.Second)},
+		{Key: []byte{3}, GetTime: now.Add(3 * time.Second)},
 	}
 	heap.Init(x)
-	heap.Push(x, KeyGetTime{Key: "d", GetTime: now.Add(4 * time.Second)})
+	heap.Push(x, KeyGetTime{Key: []byte{4}, GetTime: now.Add(4 * time.Second)})
 	assert.Equal(t, 4, x.Len())
 
 	x1 := heap.Pop(x).(KeyGetTime)
@@ -33,10 +33,10 @@ func TestKeyGetTimes(t *testing.T) {
 	x3 := heap.Pop(x).(KeyGetTime)
 	x4 := heap.Pop(x).(KeyGetTime)
 
-	assert.Equal(t, "d", x1.Key)
-	assert.Equal(t, "c", x2.Key)
-	assert.Equal(t, "b", x3.Key)
-	assert.Equal(t, "a", x4.Key)
+	assert.Equal(t, []byte{4}, x1.Key)
+	assert.Equal(t, []byte{3}, x2.Key)
+	assert.Equal(t, []byte{2}, x3.Key)
+	assert.Equal(t, []byte{1}, x4.Key)
 
 	assert.True(t, x1.GetTime.After(x2.GetTime))
 	assert.True(t, x2.GetTime.After(x3.GetTime))

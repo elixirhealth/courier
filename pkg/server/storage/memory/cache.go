@@ -2,6 +2,7 @@ package memory
 
 import (
 	"bytes"
+	"encoding/hex"
 	"sync"
 
 	"github.com/elixirhealth/courier/pkg/server/storage"
@@ -30,22 +31,23 @@ func New(params *storage.Parameters, logger *zap.Logger) (storage.Cache, storage
 }
 
 // Put stores the marshaled document value at the hex of its key.
-func (c *cache) Put(key string, value []byte) error {
-	logger := c.logger.With(zap.String("key", key))
+func (c *cache) Put(key []byte, value []byte) error {
+	keyHex := hex.EncodeToString(key)
+	logger := c.logger.With(zap.String(logKey, keyHex))
 	logger.Debug("putting into cache")
 	if len(key) != storage.KeySize {
 		return storage.ErrInvalidKeySize
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if existing, in := c.docs[key]; in {
+	if existing, in := c.docs[keyHex]; in {
 		if !bytes.Equal(value, existing) {
 			return storage.ErrExistingNotEqualNewValue
 		}
 		logger.Debug("cache already contains value")
 		return nil
 	}
-	c.docs[key] = value
+	c.docs[keyHex] = value
 	if err := c.ar.CachePut(key); err != nil {
 		return err
 	}
@@ -54,11 +56,12 @@ func (c *cache) Put(key string, value []byte) error {
 }
 
 // Get retrieves the marshaled document value of the given hex key.
-func (c *cache) Get(key string) ([]byte, error) {
-	logger := c.logger.With(zap.String("key", key))
+func (c *cache) Get(key []byte) ([]byte, error) {
+	keyHex := hex.EncodeToString(key)
+	logger := c.logger.With(zap.String(logKey, keyHex))
 	logger.Debug("getting from cache")
 	c.mu.Lock()
-	value, in := c.docs[key]
+	value, in := c.docs[keyHex]
 	c.mu.Unlock()
 	if !in {
 		return nil, storage.ErrMissingValue
@@ -85,12 +88,13 @@ func (c *cache) EvictNext() error {
 		return err
 	}
 	for _, key := range keys {
+		keyHex := hex.EncodeToString(key)
 		c.mu.Lock()
-		if _, in := c.docs[key]; !in {
+		if _, in := c.docs[keyHex]; !in {
 			c.mu.Unlock()
 			return storage.ErrMissingValue
 		}
-		delete(c.docs, key)
+		delete(c.docs, keyHex)
 		c.mu.Unlock()
 	}
 	c.logger.Info("evicted documents", zap.Int(logNEvicted, len(keys)))

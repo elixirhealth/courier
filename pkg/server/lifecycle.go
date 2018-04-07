@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"math/big"
 	"sync"
 	"time"
@@ -122,7 +123,7 @@ func (c *Courier) startLibriPutters() {
 					return
 				}
 				c.Logger.Debug("publishing document to libri",
-					zap.String(logDocKey, key))
+					zap.String(logDocKey, hex.EncodeToString(key)))
 				docBytes, err := c.cache.Get(key)
 
 				msg = "error getting document from cache"
@@ -284,13 +285,16 @@ func newTimeoutExpBackoff(timeout time.Duration) backoff.BackOff {
 	return bo
 }
 
-func (c *Courier) handleRunningErr(err error, errs chan error, logMsg string, key string) bool {
+func (c *Courier) handleRunningErr(err error, errs chan error, logMsg string, key []byte) bool {
 	select {
 	case errs <- err:
 	default:
 	}
 	if err != nil {
-		c.Logger.Error(logMsg, zap.String(logDocKey, key), zap.Error(err))
+		c.Logger.Error(logMsg,
+			zap.String(logDocKey, hex.EncodeToString(key)),
+			zap.Error(err),
+		)
 		return false
 	}
 	return true

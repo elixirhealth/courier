@@ -1,6 +1,8 @@
 package datastore
 
 import (
+	"bytes"
+	"encoding/hex"
 	"errors"
 	"sort"
 	"testing"
@@ -20,7 +22,7 @@ func TestAccessRecorder_CachePut_ok(t *testing.T) {
 		client: dsClient,
 		logger: lg,
 	}
-	err := ds.CachePut("some Key")
+	err := ds.CachePut([]byte{1, 2, 3})
 	assert.Nil(t, err)
 	assert.NotZero(t, dsClient.value.(*storage.AccessRecord).CachePutDateEarliest)
 	assert.NotZero(t, dsClient.value.(*storage.AccessRecord).CachePutTimeEarliest)
@@ -29,7 +31,7 @@ func TestAccessRecorder_CachePut_ok(t *testing.T) {
 	assert.False(t, dsClient.value.(*storage.AccessRecord).LibriPutOccurred)
 
 	// second put should be no-op
-	err = ds.CachePut("some Key")
+	err = ds.CachePut([]byte{1, 2, 3})
 	assert.Nil(t, err)
 }
 
@@ -43,7 +45,7 @@ func TestAccessRecorder_CachePut_err(t *testing.T) {
 		client: dsClient,
 		logger: lg,
 	}
-	err := ds.CachePut("some Key")
+	err := ds.CachePut([]byte{1, 2, 3})
 	assert.NotNil(t, err)
 
 	dsClient = &fixedDatastoreClient{
@@ -54,7 +56,7 @@ func TestAccessRecorder_CachePut_err(t *testing.T) {
 		client: dsClient,
 		logger: lg,
 	}
-	err = ds.CachePut("some Key")
+	err = ds.CachePut([]byte{1, 2, 3})
 	assert.NotNil(t, err)
 }
 
@@ -68,7 +70,7 @@ func TestAccessRecorder_CacheGet(t *testing.T) {
 		client: dsClient,
 		logger: lg,
 	}
-	err := ds.CacheGet("some Key")
+	err := ds.CacheGet([]byte{1, 2, 3})
 	assert.Nil(t, err)
 	assert.NotZero(t, dsClient.value.(*storage.AccessRecord).CachePutTimeEarliest)
 	assert.Zero(t, dsClient.value.(*storage.AccessRecord).LibriPutTimeEarliest)
@@ -85,7 +87,7 @@ func TestAccessRecorder_LibriPut(t *testing.T) {
 		client: dsClient,
 		logger: lg,
 	}
-	err := ds.LibriPut("some Key")
+	err := ds.LibriPut([]byte{1, 2, 3})
 	assert.Nil(t, err)
 	assert.NotZero(t, dsClient.value.(*storage.AccessRecord).CachePutTimeEarliest)
 	assert.NotZero(t, dsClient.value.(*storage.AccessRecord).LibriPutTimeEarliest)
@@ -101,12 +103,12 @@ func TestAccessRecorder_CacheEvict_ok(t *testing.T) {
 		client: dsClient,
 		logger: lg,
 	}
-	keyNames := []string{"key1", "key2"}
-	err := ds.CacheEvict(keyNames)
+	keys := [][]byte{{1, 2, 3}, {4, 5, 6}}
+	err := ds.CacheEvict(keys)
 	assert.Nil(t, err)
 	expectedDeleteKeys := []*datastore.Key{
-		datastore.NameKey(accessRecordKind, "key1", nil),
-		datastore.NameKey(accessRecordKind, "key2", nil),
+		datastore.NameKey(accessRecordKind, hex.EncodeToString([]byte{1, 2, 3}), nil),
+		datastore.NameKey(accessRecordKind, hex.EncodeToString([]byte{4, 5, 6}), nil),
 	}
 	assert.Equal(t, expectedDeleteKeys, dsClient.deleteKeys)
 }
@@ -121,7 +123,7 @@ func TestAccessRecorder_CacheEvict_err(t *testing.T) {
 		client: dsClient,
 		logger: lg,
 	}
-	keyNames := []string{"key1", "key2"}
+	keyNames := [][]byte{{1, 2, 3}, {4, 5, 6}}
 	err := ds.CacheEvict(keyNames)
 	assert.NotNil(t, err)
 }
@@ -135,9 +137,9 @@ func TestAccessRecorder_GetNextEvictions_ok(t *testing.T) {
 	}
 
 	dsKeys := []*datastore.Key{
-		datastore.NameKey(accessRecordKind, "key1", nil),
-		datastore.NameKey(accessRecordKind, "key2", nil),
-		datastore.NameKey(accessRecordKind, "key3", nil),
+		datastore.NameKey(accessRecordKind, hex.EncodeToString([]byte{1, 2, 3}), nil),
+		datastore.NameKey(accessRecordKind, hex.EncodeToString([]byte{4, 5, 6}), nil),
+		datastore.NameKey(accessRecordKind, hex.EncodeToString([]byte{7, 8, 9}), nil),
 	}
 
 	// should have eviction when count value > LRU cache size
@@ -158,9 +160,9 @@ func TestAccessRecorder_GetNextEvictions_ok(t *testing.T) {
 		params: params,
 		logger: lg,
 	}
-	expected := []string{"key1", "key2"}
+	expected := [][]byte{{1, 2, 3}, {4, 5, 6}}
 	keys, err := ds.GetNextEvictions()
-	sort.Strings(keys)
+	sort.Slice(keys, func(i, j int) bool { return bytes.Compare(keys[i], keys[j]) < 0 })
 	assert.Nil(t, err)
 	assert.Equal(t, expected, keys)
 
@@ -225,13 +227,13 @@ func TestAccessRecorder_Evict_ok(t *testing.T) {
 		client: dsClient,
 		logger: lg,
 	}
-	keys := []string{"key1", "key2"}
+	keys := [][]byte{{1, 2, 3}, {4, 5, 6}}
 	err := ds.CacheEvict(keys)
 	assert.Nil(t, err)
 
 	expected := []*datastore.Key{
-		datastore.NameKey(accessRecordKind, "key1", nil),
-		datastore.NameKey(accessRecordKind, "key2", nil),
+		datastore.NameKey(accessRecordKind, hex.EncodeToString([]byte{1, 2, 3}), nil),
+		datastore.NameKey(accessRecordKind, hex.EncodeToString([]byte{4, 5, 6}), nil),
 	}
 	assert.Equal(t, expected, dsClient.deleteKeys)
 }
@@ -246,7 +248,7 @@ func TestAccessRecorder_Evict_err(t *testing.T) {
 		client: dsClient,
 		logger: lg,
 	}
-	keys := []string{"key1", "key2"}
+	keys := [][]byte{{1, 2, 3}, {4, 5, 6}}
 	err := ds.CacheEvict(keys)
 	assert.NotNil(t, err)
 }
@@ -261,7 +263,7 @@ func TestAccessRecorder_update_err(t *testing.T) {
 		params: storage.NewDefaultParameters(),
 		client: dsClient,
 	}
-	err := ds.LibriPut("some Key without log")
+	err := ds.LibriPut([]byte("some Key without log"))
 	assert.Equal(t, datastore.ErrNoSuchEntity, err)
 
 	// put error
@@ -274,6 +276,6 @@ func TestAccessRecorder_update_err(t *testing.T) {
 		client: dsClient,
 		logger: lg,
 	}
-	err = ds.LibriPut("some Key")
+	err = ds.LibriPut([]byte{1, 2, 3})
 	assert.NotNil(t, err)
 }
