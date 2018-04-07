@@ -85,6 +85,7 @@ echo
 echo "testing catalog health..."
 docker run --rm --net=courier ${CATALOG_IMAGE} test health \
     --catalogs "${catalog_addr}" \
+    --storageMemory \
     --logLevel "${CATALOG_LOG_LEVEL}"
 
 echo
