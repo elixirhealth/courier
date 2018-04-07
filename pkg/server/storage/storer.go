@@ -133,8 +133,7 @@ func NewDefaultParameters() *Parameters {
 	}
 }
 
-// AccessRecord contains access times for Puts and Gets for a particular document. It is only
-// exported so the DataStore API can reflect on it.
+// AccessRecord contains access times for Puts and Gets for a particular document.
 type AccessRecord struct {
 	CachePutDateEarliest int64     `datastore:"cache_put_date_earliest"`
 	CachePutTimeEarliest time.Time `datastore:"cache_put_time_earliest,noindex"`

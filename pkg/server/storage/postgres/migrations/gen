@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+pushd ${DIR} > /dev/null 2>&1
+go-bindata -o migrations.go -pkg migrations -prefix 'sql/' sql/
+popd > /dev/null 2>&1
