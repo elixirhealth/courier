@@ -72,11 +72,11 @@ func TestGetCourierConfig(t *testing.T) {
 	for i, l := range c.Librarians {
 		assert.Equal(t, librarians[i], l.String())
 	}
-	assert.Equal(t, bstorage.DataStore, c.Cache.Type)
-	assert.Equal(t, cacheRecentWindowDays, c.Cache.RecentWindowDays)
-	assert.Equal(t, cacheLRUSize, c.Cache.LRUCacheSize)
-	assert.Equal(t, cacheEvictionBatchSize, c.Cache.EvictionBatchSize)
-	assert.Equal(t, cacheEvictionPeriod, c.Cache.EvictionPeriod)
+	assert.Equal(t, bstorage.DataStore, c.Storage.Type)
+	assert.Equal(t, cacheRecentWindowDays, c.Storage.RecentWindowDays)
+	assert.Equal(t, cacheLRUSize, c.Storage.LRUCacheSize)
+	assert.Equal(t, cacheEvictionBatchSize, c.Storage.EvictionBatchSize)
+	assert.Equal(t, cacheEvictionPeriod, c.Storage.EvictionPeriod)
 	assert.Equal(t, catalog, c.Catalog.String())
 	assert.Equal(t, nCatalogPutters, c.NCatalogPutters)
 	assert.Equal(t, catalogPutQueueSize, c.CatalogPutQueueSize)

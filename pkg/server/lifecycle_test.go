@@ -59,7 +59,7 @@ func TestCourier_startEvictor(t *testing.T) {
 		WithLibrarianAddrs([]*net.TCPAddr{{IP: net.ParseIP("localhost"), Port: 20100}}).
 		WithCatalogAddr(&net.TCPAddr{IP: net.ParseIP("localhost"), Port: 20200}).
 		WithKeyAddr(&net.TCPAddr{IP: net.ParseIP("localhost"), Port: 20300})
-	config.Cache.EvictionPeriod = 10 * time.Millisecond
+	config.Storage.EvictionPeriod = 10 * time.Millisecond
 
 	c, err := newCourier(config)
 	assert.Nil(t, err)
@@ -67,7 +67,7 @@ func TestCourier_startEvictor(t *testing.T) {
 	c.cache = testCache
 
 	go c.startEvictor()
-	time.Sleep(4 * c.config.Cache.EvictionPeriod)
+	time.Sleep(4 * c.config.Storage.EvictionPeriod)
 	close(c.BaseServer.Stop)
 
 	testCache.mu.Lock()

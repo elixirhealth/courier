@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/drausin/libri/libri/common/subscribe"
-	"github.com/elixirhealth/courier/pkg/cache"
+	"github.com/elixirhealth/key/pkg/server/storage"
 	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -18,7 +18,7 @@ func TestNewDefaultConfig(t *testing.T) {
 	assert.NotEmpty(t, c.LibriGetTimeout)
 	assert.NotEmpty(t, c.LibriPutTimeout)
 	assert.NotEmpty(t, c.LibriPutQueueSize)
-	assert.NotEmpty(t, c.Cache)
+	assert.NotEmpty(t, c.Storage)
 	assert.NotEmpty(t, c.SubscribeTo)
 }
 
@@ -114,11 +114,11 @@ func TestConfig_WithGCPProjectID(t *testing.T) {
 
 func TestConfig_WithCache(t *testing.T) {
 	c1, c2, c3 := &Config{}, &Config{}, &Config{}
-	c1.WithDefaultCache()
-	assert.Equal(t, c1.Cache.Type, c2.WithCache(nil).Cache.Type)
+	c1.WithDefaultStorage()
+	assert.Equal(t, c1.Storage.Type, c2.WithCache(nil).Storage.Type)
 	assert.NotEqual(t,
-		c1.Cache.Type,
-		c3.WithCache(&cache.Parameters{Type: bstorage.DataStore}).Cache.Type,
+		c1.Storage.Type,
+		c3.WithCache(&storage.Parameters{Type: bstorage.DataStore}).Storage.Type,
 	)
 }
 

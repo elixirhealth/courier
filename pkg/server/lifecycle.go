@@ -65,14 +65,14 @@ func (c *Courier) startEvictor() {
 		c.StopServer()
 	}()
 
-	maxInitialWait := int64(c.config.Cache.EvictionPeriod)
+	maxInitialWait := int64(c.config.Storage.EvictionPeriod)
 	initialWait, err := rand.Int(rand.Reader, big.NewInt(maxInitialWait))
 	errs <- err
 	time.Sleep(time.Duration(initialWait.Int64()))
 	for {
 		pause := make(chan struct{})
 		go func() {
-			time.Sleep(c.config.Cache.EvictionPeriod)
+			time.Sleep(c.config.Storage.EvictionPeriod)
 			maybeClose(pause)
 		}()
 		go func() {

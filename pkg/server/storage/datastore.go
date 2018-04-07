@@ -1,4 +1,4 @@
-package cache
+package storage
 
 import (
 	"bytes"
@@ -56,7 +56,7 @@ type datastoreCache struct {
 	logger         *zap.Logger
 }
 
-// NewDatastore creates a new GCP DataStore Cache instance. This function assumes the following:
+// NewDatastore creates a new GCP DataStore Storage instance. This function assumes the following:
 // - if DATASTORE_EMULATOR_HOST env var is set, it uses that instead of project
 // - production creds use GOOGLE_APPLICATION_CREDENTIALS env var to point to the credentials JSON
 // file
