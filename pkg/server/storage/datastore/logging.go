@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"encoding/hex"
 	"time"
 
 	"github.com/elixirhealth/courier/pkg/server/storage"
@@ -32,10 +33,10 @@ func nextEvictionsFields(nEvictable int, lruCacheSize uint) []zapcore.Field {
 }
 
 func updatedAccessRecordFields(
-	key string, existing, updated *storage.AccessRecord,
+	key []byte, existing, updated *storage.AccessRecord,
 ) []zapcore.Field {
 	return []zapcore.Field{
-		zap.String(logKey, key),
+		zap.String(logKey, hex.EncodeToString(key)),
 		zap.Object(logFrom, existing),
 		zap.Object(logTo, updated),
 	}
@@ -58,9 +59,9 @@ func evictableValuesFields(nEvictable, nToEvict int, p *storage.Parameters) []za
 	}
 }
 
-func accessRecordFields(key string, value *storage.AccessRecord) []zapcore.Field {
+func accessRecordFields(key []byte, value *storage.AccessRecord) []zapcore.Field {
 	return []zapcore.Field{
-		zap.String(logKey, key),
+		zap.String(logKey, hex.EncodeToString(key)),
 		zap.Object(logValue, value),
 	}
 }

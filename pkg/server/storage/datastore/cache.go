@@ -3,6 +3,7 @@ package datastore
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 
 	"cloud.google.com/go/datastore"
 	"github.com/elixirhealth/courier/pkg/server/storage"
@@ -57,13 +58,14 @@ func New(
 }
 
 // Put stores the marshaled document value at the hex of its Key.
-func (c *cache) Put(key string, value []byte) error {
-	logger := c.logger.With(zap.String("Key", key))
+func (c *cache) Put(key []byte, value []byte) error {
+	keyHex := hex.EncodeToString(key)
+	logger := c.logger.With(zap.String(logKey, keyHex))
 	logger.Debug("putting into cache")
 	if len(key) != storage.KeySize {
 		return storage.ErrInvalidKeySize
 	}
-	dsKey := datastore.NameKey(documentKind, key, nil)
+	dsKey := datastore.NameKey(documentKind, keyHex, nil)
 	existingValue := &MarshaledDocument{}
 	ctx, cancel := context.WithTimeout(context.Background(), c.params.GetTimeout)
 	err := c.client.Get(ctx, dsKey, existingValue)
@@ -97,10 +99,11 @@ func (c *cache) Put(key string, value []byte) error {
 }
 
 // Get retrieves the marshaled document value of the given hex Key.
-func (c *cache) Get(key string) ([]byte, error) {
-	logger := c.logger.With(zap.String("Key", key))
+func (c *cache) Get(key []byte) ([]byte, error) {
+	keyHex := hex.EncodeToString(key)
+	logger := c.logger.With(zap.String(logKey, keyHex))
 	logger.Debug("getting from cache")
-	cacheKey := datastore.NameKey(documentKind, key, nil)
+	cacheKey := datastore.NameKey(documentKind, keyHex, nil)
 	existingCacheValue := &MarshaledDocument{}
 	ctx, cancel := context.WithTimeout(context.Background(), c.params.GetTimeout)
 	defer cancel()
@@ -131,7 +134,7 @@ func (c *cache) EvictNext() error {
 	}
 	dsKeys := make([]*datastore.Key, len(keyNames))
 	for i, keyName := range keyNames {
-		dsKeys[i] = datastore.NameKey(documentKind, keyName, nil)
+		dsKeys[i] = datastore.NameKey(documentKind, hex.EncodeToString(keyName), nil)
 	}
 	if err = c.accessRecorder.CacheEvict(keyNames); err != nil {
 		return err

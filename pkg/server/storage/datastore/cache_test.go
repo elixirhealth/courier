@@ -2,8 +2,8 @@ package datastore
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
-	"fmt"
 	"math/rand"
 	"testing"
 
@@ -34,7 +34,7 @@ func TestCache_PutGet_ok(t *testing.T) {
 			},
 		}
 		value1 := util.RandBytes(rng, valueSize)
-		key := fmt.Sprintf("%x", util.RandBytes(rng, id.Length))
+		key := util.RandBytes(rng, id.Length)
 
 		err := ds.Put(key, value1)
 		assert.Nil(t, err)
@@ -73,7 +73,7 @@ func TestCache_Put_err(t *testing.T) {
 		accessRecorder: &fixedAccessRecorder{},
 		logger:         lg,
 	}
-	err := ds.Put("too short Key", []byte{})
+	err := ds.Put([]byte{1, 2, 3}, []byte{})
 	assert.Equal(t, storage.ErrInvalidKeySize, err)
 
 	// get error
@@ -85,7 +85,7 @@ func TestCache_Put_err(t *testing.T) {
 		accessRecorder: &fixedAccessRecorder{},
 		logger:         lg,
 	}
-	key := fmt.Sprintf("%x", util.RandBytes(rng, id.Length))
+	key := util.RandBytes(rng, id.Length)
 	err = ds.Put(key, []byte{})
 	assert.NotNil(t, err)
 
@@ -149,7 +149,7 @@ func TestCache_Get_err(t *testing.T) {
 		accessRecorder: &fixedAccessRecorder{},
 		logger:         lg,
 	}
-	key := fmt.Sprintf("%x", util.RandBytes(rng, id.Length))
+	key := util.RandBytes(rng, id.Length)
 	docBytes, err := ds.Get(key)
 	assert.Equal(t, storage.ErrMissingValue, err)
 	assert.Nil(t, docBytes)
@@ -163,7 +163,7 @@ func TestCache_Get_err(t *testing.T) {
 		accessRecorder: &fixedAccessRecorder{},
 		logger:         lg,
 	}
-	key = fmt.Sprintf("%x", util.RandBytes(rng, id.Length))
+	key = util.RandBytes(rng, id.Length)
 	docBytes, err = ds.Get(key)
 	assert.NotNil(t, err)
 	assert.Nil(t, docBytes)
@@ -190,7 +190,7 @@ func TestCache_EvictNext_ok(t *testing.T) {
 	lg := zap.NewNop()
 	dsClient := &fixedDatastoreClient{}
 	ar := &fixedAccessRecorder{
-		nextEvictions: []string{}, // nothing to evict
+		nextEvictions: [][]byte{}, // nothing to evict
 	}
 	dc := &cache{
 		params:         storage.NewDefaultParameters(),
@@ -201,7 +201,7 @@ func TestCache_EvictNext_ok(t *testing.T) {
 	err := dc.EvictNext()
 	assert.Nil(t, err)
 
-	evictionKeys := []string{"key1", "key2"}
+	evictionKeys := [][]byte{{1, 2, 3}, {4, 5, 6}}
 	ar = &fixedAccessRecorder{
 		nextEvictions: evictionKeys,
 	}
@@ -214,8 +214,8 @@ func TestCache_EvictNext_ok(t *testing.T) {
 	err = dc.EvictNext()
 	assert.Nil(t, err)
 	expectedDeleteKeys := []*datastore.Key{
-		datastore.NameKey(documentKind, "key1", nil),
-		datastore.NameKey(documentKind, "key2", nil),
+		datastore.NameKey(documentKind, hex.EncodeToString([]byte{1, 2, 3}), nil),
+		datastore.NameKey(documentKind, hex.EncodeToString([]byte{4, 5, 6}), nil),
 	}
 	assert.Equal(t, expectedDeleteKeys, dsClient.deleteKeys)
 	assert.Equal(t, evictionKeys, ar.cacheEvictKeys)
@@ -239,7 +239,7 @@ func TestCache_EvictNext_err(t *testing.T) {
 		params: storage.NewDefaultParameters(),
 		client: dsClient,
 		accessRecorder: &fixedAccessRecorder{
-			nextEvictions: []string{"key1", "key2"},
+			nextEvictions: [][]byte{{1, 2, 3}, {4, 5, 6}},
 			cacheEvictErr: errors.New("some evict error"),
 		},
 		logger: lg,
@@ -253,7 +253,7 @@ func TestCache_EvictNext_err(t *testing.T) {
 			deleteErr: errors.New("some delete error"),
 		},
 		accessRecorder: &fixedAccessRecorder{
-			nextEvictions: []string{"key1", "key2"},
+			nextEvictions: [][]byte{{1, 2, 3}, {4, 5, 6}},
 		},
 		logger: lg,
 	}
@@ -392,29 +392,29 @@ type fixedAccessRecorder struct {
 	cachePutErr         error
 	cacheGetErr         error
 	cacheEvictErr       error
-	cacheEvictKeys      []string
+	cacheEvictKeys      [][]byte
 	libriPutErr         error
-	nextEvictions       []string
+	nextEvictions       [][]byte
 	getEvictionBatchErr error
 }
 
-func (r *fixedAccessRecorder) CachePut(key string) error {
+func (r *fixedAccessRecorder) CachePut(key []byte) error {
 	return r.cachePutErr
 }
 
-func (r *fixedAccessRecorder) CacheGet(key string) error {
+func (r *fixedAccessRecorder) CacheGet(key []byte) error {
 	return r.cacheGetErr
 }
 
-func (r *fixedAccessRecorder) CacheEvict(keys []string) error {
+func (r *fixedAccessRecorder) CacheEvict(keys [][]byte) error {
 	r.cacheEvictKeys = keys
 	return r.cacheEvictErr
 }
 
-func (r *fixedAccessRecorder) LibriPut(key string) error {
+func (r *fixedAccessRecorder) LibriPut(key []byte) error {
 	return r.libriPutErr
 }
 
-func (r *fixedAccessRecorder) GetNextEvictions() ([]string, error) {
+func (r *fixedAccessRecorder) GetNextEvictions() ([][]byte, error) {
 	return r.nextEvictions, r.getEvictionBatchErr
 }

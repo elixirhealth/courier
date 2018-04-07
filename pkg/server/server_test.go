@@ -72,12 +72,12 @@ func TestCourier_Put_ok(t *testing.T) {
 		cache:         cc,
 		catalog:       &fixedCatalogClient{},
 		key:           &fixedKeyClient{},
-		libriPutQueue: make(chan string, 1),
+		libriPutQueue: make(chan []byte, 1),
 	}
 	rp, err := c.Put(context.Background(), rq)
 	assert.Nil(t, err)
 	assert.Equal(t, api.PutOperation_LEFT_EXISTING, rp.Operation)
-	assert.Equal(t, key.String(), cc.getKey)
+	assert.Equal(t, key.Bytes(), cc.getKey)
 
 	// when Storage doesn't have value, Put request should store in Storage and add
 	// to libriPutQueue queue
@@ -94,17 +94,17 @@ func TestCourier_Put_ok(t *testing.T) {
 				{EntityId: "some reader ID"},
 			},
 		},
-		libriPutQueue: make(chan string, 1),
+		libriPutQueue: make(chan []byte, 1),
 	}
 	rp, err = c.Put(context.Background(), rq)
 	assert.Nil(t, err)
 	assert.Equal(t, api.PutOperation_STORED, rp.Operation)
-	assert.Equal(t, key.String(), cc.getKey)
-	assert.Equal(t, key.String(), cc.putKey)
+	assert.Equal(t, key.Bytes(), cc.getKey)
+	assert.Equal(t, key.Bytes(), cc.putKey)
 	assert.Equal(t, valueBytes, cc.value)
 	assert.Equal(t, 1, catalog.nPuts)
 	toPutKey := <-c.libriPutQueue
-	assert.Equal(t, key.String(), toPutKey)
+	assert.Equal(t, key.Bytes(), toPutKey)
 }
 
 func TestCourier_Put_err(t *testing.T) {
@@ -152,7 +152,7 @@ func TestCourier_Put_err(t *testing.T) {
 				cache: &fixedCache{
 					getErr: storage.ErrMissingValue,
 				},
-				libriPutQueue: make(chan string), // no slack
+				libriPutQueue: make(chan []byte), // no slack
 			},
 			err: ErrFullLibriPutQueue,
 		},
@@ -190,7 +190,7 @@ func TestCourier_Get_ok(t *testing.T) {
 	rp, err := c.Get(context.Background(), rq)
 	assert.Nil(t, err)
 	assert.Equal(t, value, rp.Value)
-	assert.Equal(t, key.String(), cc.getKey)
+	assert.Equal(t, key.Bytes(), cc.getKey)
 
 	// when Storage doesn't have doc but libri does, Get should return it
 	cc = &fixedCache{getErr: storage.ErrMissingValue}
@@ -203,8 +203,8 @@ func TestCourier_Get_ok(t *testing.T) {
 	rp, err = c.Get(context.Background(), rq)
 	assert.Nil(t, err)
 	assert.Equal(t, value, rp.Value)
-	assert.Equal(t, key.String(), cc.getKey)
-	assert.Equal(t, key.String(), cc.putKey)
+	assert.Equal(t, key.Bytes(), cc.getKey)
+	assert.Equal(t, key.Bytes(), cc.putKey)
 	assert.Equal(t, valueBytes, cc.value)
 	assert.Equal(t, key, acq.docKey)
 }
@@ -277,9 +277,9 @@ func TestCourier_Get_err(t *testing.T) {
 }
 
 type fixedCache struct {
-	putKey       string
+	putKey       []byte
 	putErr       error
-	getKey       string
+	getKey       []byte
 	getErr       error
 	evictErr     error
 	evictCalls   uint
@@ -288,13 +288,13 @@ type fixedCache struct {
 	mu           sync.Mutex
 }
 
-func (f *fixedCache) Put(key string, value []byte) error {
+func (f *fixedCache) Put(key []byte, value []byte) error {
 	f.putKey = key
 	f.value = value
 	return f.putErr
 }
 
-func (f *fixedCache) Get(key string) ([]byte, error) {
+func (f *fixedCache) Get(key []byte) ([]byte, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.getKey = key
@@ -304,7 +304,7 @@ func (f *fixedCache) Get(key string) ([]byte, error) {
 	return f.value, nil
 }
 
-func (f *fixedCache) Evict(key string) error {
+func (f *fixedCache) Evict(key []byte) error {
 	return f.evictErr
 }
 

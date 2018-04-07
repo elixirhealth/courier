@@ -31,8 +31,8 @@ const (
 	// DefaultCRUDTimeout is the default timeout for get, put, and delete DataStore operations.
 	DefaultCRUDTimeout = 1 * time.Second
 
-	// KeySize is size of the hex length of a document ID
-	KeySize = 2 * id.Length
+	// KeySize is size of the length of a document ID
+	KeySize = id.Length
 
 	// SecsPerDay is the number of seconds in a day.
 	SecsPerDay = 60 * 60 * 24
@@ -58,10 +58,10 @@ var (
 // bstorage layer works.
 type Cache interface {
 	// Put stores the marshaled document value at the hex of its Key.
-	Put(key string, value []byte) error
+	Put(key []byte, value []byte) error
 
 	// Get retrieves the marshaled document value of the given Key.
-	Get(key string) ([]byte, error)
+	Get(key []byte) ([]byte, error)
 
 	// EvictNext removes the next batch of documents eligible for eviction from the cache.
 	EvictNext() error
@@ -71,23 +71,23 @@ type Cache interface {
 type AccessRecorder interface {
 	// CachePut creates a new access record with the cache's put time for the document with
 	// the given Key.
-	CachePut(key string) error
+	CachePut(key []byte) error
 
 	// CacheGet updates the access record's latest get time for the document with the given Key.
-	CacheGet(key string) error
+	CacheGet(key []byte) error
 
 	// CacheEvict deletes the access record for the documents with the given keys.
-	CacheEvict(keys []string) error
+	CacheEvict(keys [][]byte) error
 
 	// LibriPut updates the access record's latest libri put time.
-	LibriPut(key string) error
+	LibriPut(key []byte) error
 
 	// GetNextEvictions gets the next batch of keys for documents to evict, which is determines
 	// by documents satisfying
 	// - before recent window
 	// - put into libri
 	// - gotten least recently
-	GetNextEvictions() ([]string, error)
+	GetNextEvictions() ([][]byte, error)
 }
 
 // Parameters defines the parameters used by the cache implementation.
@@ -181,7 +181,7 @@ func (r *AccessRecord) MarshalLogObject(oe zapcore.ObjectEncoder) error {
 
 // KeyGetTime represents get access time for a given key.
 type KeyGetTime struct {
-	Key     string
+	Key     []byte
 	GetTime time.Time
 }
 

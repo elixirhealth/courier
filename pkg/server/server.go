@@ -54,7 +54,7 @@ type Courier struct {
 	libriPutter    libriapi.Putter
 	libriAcquirer  publish.Acquirer
 	libriPublisher publish.Publisher
-	libriPutQueue  chan string
+	libriPutQueue  chan []byte
 
 	catalog         catalogapi.CatalogClient
 	subscribeTo     subscribe.To
@@ -133,7 +133,7 @@ func newCourier(config *Config) (*Courier, error) {
 		libriPutter:    putter,
 		libriAcquirer:  acquirer,
 		libriPublisher: publisher,
-		libriPutQueue:  make(chan string, config.LibriPutQueueSize),
+		libriPutQueue:  make(chan []byte, config.LibriPutQueueSize),
 
 		catalog:         catalog,
 		subscribeTo:     subscribeTo,
@@ -149,10 +149,9 @@ func (c *Courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 	if err := api.ValidatePutRequest(rq); err != nil {
 		return nil, err
 	}
-	docKey := id.FromBytes(rq.Key)
 
 	// check Storage for value
-	cachedDocBytes, err := c.cache.Get(docKey.String())
+	cachedDocBytes, err := c.cache.Get(rq.Key)
 	if err != nil && err != storage.ErrMissingValue {
 		// unexpected error
 		return nil, err
@@ -171,13 +170,13 @@ func (c *Courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 	}
 
 	// Storage doesn't have doc, so add it
-	if err = c.cache.Put(docKey.String(), newDocBytes); err != nil {
+	if err = c.cache.Put(rq.Key, newDocBytes); err != nil {
 		return nil, err
 	}
 	if err = c.maybePutCatalog(rq.Key, rq.Value); err != nil {
 		return nil, err
 	}
-	if err = c.maybeAddLibriPutQueue(docKey.String()); err != nil {
+	if err = c.maybeAddLibriPutQueue(rq.Key); err != nil {
 		return nil, err
 	}
 	rp := &api.PutResponse{Operation: api.PutOperation_STORED}
@@ -204,7 +203,7 @@ func (c *Courier) maybePutCatalog(key []byte, value *libriapi.Document) error {
 	return nil
 }
 
-func (c *Courier) maybeAddLibriPutQueue(key string) error {
+func (c *Courier) maybeAddLibriPutQueue(key []byte) error {
 	select {
 	case <-c.BaseServer.Stop:
 		return grpc.ErrServerStopped
@@ -222,8 +221,7 @@ func (c *Courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse
 		return nil, err
 	}
 
-	docKey := id.FromBytes(rq.Key)
-	docBytes, err := c.cache.Get(docKey.String())
+	docBytes, err := c.cache.Get(rq.Key)
 	if err != nil && err != storage.ErrMissingValue {
 		// unexpected error
 		return nil, err
@@ -239,7 +237,8 @@ func (c *Courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse
 	}
 
 	// Storage doesn't have value, so try to get it from libri
-	doc, err := c.libriAcquirer.Acquire(docKey, nil, c.libriGetter)
+	keyID := id.FromBytes(rq.Key)
+	doc, err := c.libriAcquirer.Acquire(keyID, nil, c.libriGetter)
 	if err != nil && err != libriapi.ErrMissingDocument {
 		return nil, err
 	}
@@ -248,7 +247,7 @@ func (c *Courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse
 	}
 	docBytes, err = proto.Marshal(doc)
 	cerrors.MaybePanic(err) // should never happen since we just unmarshaled from wire
-	if err = c.cache.Put(docKey.String(), docBytes); err != nil {
+	if err = c.cache.Put(rq.Key, docBytes); err != nil {
 		return nil, err
 	}
 	c.Logger.Info("returning value from libri", zap.String(logKey, id.Hex(rq.Key)))

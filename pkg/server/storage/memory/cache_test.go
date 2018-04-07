@@ -1,7 +1,7 @@
 package memory
 
 import (
-	"fmt"
+	"encoding/hex"
 	"math/rand"
 	"testing"
 	"time"
@@ -23,7 +23,8 @@ func TestCache_PutGet_ok(t *testing.T) {
 
 	for _, valueSize := range valueSizes {
 		value1 := util.RandBytes(rng, valueSize)
-		key := fmt.Sprintf("%x", util.RandBytes(rng, id.Length))
+		key := util.RandBytes(rng, id.Length)
+		keyHex := hex.EncodeToString(key)
 
 		err := c.Put(key, value1)
 		assert.Nil(t, err)
@@ -33,7 +34,7 @@ func TestCache_PutGet_ok(t *testing.T) {
 		assert.Nil(t, err)
 
 		// check this internal side effect b/c it is important for eviction
-		accessLogValue1 := ar.(*accessRecorder).records[key]
+		accessLogValue1 := ar.(*accessRecorder).records[keyHex]
 		assert.NotZero(t, accessLogValue1.CachePutTimeEarliest)
 		assert.Zero(t, accessLogValue1.LibriPutTimeEarliest)
 		assert.Zero(t, accessLogValue1.CacheGetTimeLatest)
@@ -43,9 +44,10 @@ func TestCache_PutGet_ok(t *testing.T) {
 		assert.Equal(t, value1, value2)
 
 		// check side effect again
-		accessLogValue2 := ar.(*accessRecorder).records[key]
+		accessLogValue2 := ar.(*accessRecorder).records[keyHex]
 		assert.NotZero(t, accessLogValue2.CachePutTimeEarliest)
-		assert.Equal(t, accessLogValue1.CachePutTimeEarliest, accessLogValue2.CachePutTimeEarliest)
+		assert.Equal(t, accessLogValue1.CachePutTimeEarliest,
+			accessLogValue2.CachePutTimeEarliest)
 		assert.Zero(t, accessLogValue2.LibriPutTimeEarliest)
 		assert.NotZero(t, accessLogValue2.CacheGetTimeLatest)
 	}
@@ -57,12 +59,12 @@ func TestCache_Put_err(t *testing.T) {
 
 	// bad key
 	c, _ := New(storage.NewDefaultParameters(), lg)
-	err := c.Put("too short key", []byte{})
+	err := c.Put([]byte{1, 2, 3}, []byte{})
 	assert.Equal(t, storage.ErrInvalidKeySize, err)
 
 	// different values for same key
 	c, _ = New(storage.NewDefaultParameters(), lg)
-	key := fmt.Sprintf("%x", util.RandBytes(rng, id.Length))
+	key := util.RandBytes(rng, id.Length)
 	err = c.Put(key, []byte("value 1"))
 	assert.Nil(t, err)
 	err = c.Put(key, []byte("value 2"))
@@ -85,7 +87,7 @@ func TestCache_Get_err(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
 	lg := zap.NewNop()
 	c, _ := New(storage.NewDefaultParameters(), lg)
-	key := fmt.Sprintf("%x", util.RandBytes(rng, id.Length))
+	key := util.RandBytes(rng, id.Length)
 
 	// missing value for key
 	value, err := c.Get(key)
@@ -110,9 +112,9 @@ func TestCache_Get_err(t *testing.T) {
 
 func TestCache_EvictNext_ok(t *testing.T) {
 	lg := zap.NewNop()
-	evictionKeys := []string{"key1", "key2"}
+	evictionKeys := [][]byte{{1, 2, 3}, {4, 5, 6}}
 	ar := &fixedAccessRecorder{
-		nextEvictions: []string{},
+		nextEvictions: [][]byte{},
 	}
 	c := &cache{
 		ar:     ar,
@@ -127,9 +129,9 @@ func TestCache_EvictNext_ok(t *testing.T) {
 	c = &cache{
 		ar: ar,
 		docs: map[string][]byte{
-			"key1": []byte("value1"),
-			"key2": []byte("value2"),
-			"key3": []byte("value3"),
+			hex.EncodeToString([]byte{1, 2, 3}): []byte("value1"),
+			hex.EncodeToString([]byte{4, 5, 6}): []byte("value2"),
+			hex.EncodeToString([]byte{7, 8, 9}): []byte("value3"),
 		},
 		logger: lg,
 	}
@@ -155,7 +157,7 @@ func TestCache_EvictNext_err(t *testing.T) {
 
 	// check ar.Evict error bubbes up
 	ar = &fixedAccessRecorder{
-		nextEvictions: []string{"key1", "key2"},
+		nextEvictions: [][]byte{{1, 2, 3}, {4, 5, 6}},
 		cacheEvictErr: errors.New("some evict error"),
 	}
 	c = &cache{
@@ -167,7 +169,7 @@ func TestCache_EvictNext_err(t *testing.T) {
 
 	// check missing value error
 	ar = &fixedAccessRecorder{
-		nextEvictions: []string{"key1", "key2"},
+		nextEvictions: [][]byte{{1, 2, 3}, {4, 5, 6}},
 	}
 	c = &cache{
 		ar:     ar,
@@ -184,11 +186,11 @@ func timeToDate(t time.Time) int64 {
 
 func TestAccessRecorder_Evict_ok(t *testing.T) {
 	lg := zap.NewNop()
-	keys := []string{"key1", "key2"}
+	keys := [][]byte{{1, 2, 3}, {4, 5, 6}}
 	ds := accessRecorder{
 		records: map[string]*storage.AccessRecord{
-			"key1": storage.NewCachePutAccessRecord(),
-			"key2": storage.NewCachePutAccessRecord(),
+			hex.EncodeToString([]byte{1, 2, 3}): storage.NewCachePutAccessRecord(),
+			hex.EncodeToString([]byte{4, 5, 6}): storage.NewCachePutAccessRecord(),
 		},
 		logger: lg,
 	}
@@ -199,7 +201,7 @@ func TestAccessRecorder_Evict_ok(t *testing.T) {
 
 func TestAccessRecorder_Evict_err(t *testing.T) {
 	lg := zap.NewNop()
-	keys := []string{"key1", "key2"}
+	keys := [][]byte{{1, 2, 3}, {4, 5, 6}}
 	ds := accessRecorder{
 		records: map[string]*storage.AccessRecord{},
 		logger:  lg,
@@ -212,29 +214,29 @@ type fixedAccessRecorder struct {
 	cachePutErr         error
 	cacheGetErr         error
 	cacheEvictErr       error
-	cacheEvictKeys      []string
+	cacheEvictKeys      [][]byte
 	libriPutErr         error
-	nextEvictions       []string
+	nextEvictions       [][]byte
 	getEvictionBatchErr error
 }
 
-func (r *fixedAccessRecorder) CachePut(key string) error {
+func (r *fixedAccessRecorder) CachePut(key []byte) error {
 	return r.cachePutErr
 }
 
-func (r *fixedAccessRecorder) CacheGet(key string) error {
+func (r *fixedAccessRecorder) CacheGet(key []byte) error {
 	return r.cacheGetErr
 }
 
-func (r *fixedAccessRecorder) CacheEvict(keys []string) error {
+func (r *fixedAccessRecorder) CacheEvict(keys [][]byte) error {
 	r.cacheEvictKeys = keys
 	return r.cacheEvictErr
 }
 
-func (r *fixedAccessRecorder) LibriPut(key string) error {
+func (r *fixedAccessRecorder) LibriPut(key []byte) error {
 	return r.libriPutErr
 }
 
-func (r *fixedAccessRecorder) GetNextEvictions() ([]string, error) {
+func (r *fixedAccessRecorder) GetNextEvictions() ([][]byte, error) {
 	return r.nextEvictions, r.getEvictionBatchErr
 }

@@ -3,9 +3,11 @@ package datastore
 import (
 	"container/heap"
 	"context"
+	"encoding/hex"
 	"time"
 
 	"cloud.google.com/go/datastore"
+	"github.com/drausin/libri/libri/common/errors"
 	"github.com/elixirhealth/courier/pkg/server/storage"
 	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
 	"go.uber.org/zap"
@@ -25,8 +27,8 @@ type accessRecorder struct {
 
 // CachePut creates a new access record with the cache's put time for the document with the given
 // Key.
-func (r *accessRecorder) CachePut(key string) error {
-	dsKey := datastore.NameKey(accessRecordKind, key, nil)
+func (r *accessRecorder) CachePut(key []byte) error {
+	dsKey := datastore.NameKey(accessRecordKind, hex.EncodeToString(key), nil)
 	ctx, cancel := context.WithTimeout(context.Background(), r.params.GetTimeout)
 	err := r.client.Get(ctx, dsKey, &storage.AccessRecord{})
 	cancel()
@@ -46,12 +48,12 @@ func (r *accessRecorder) CachePut(key string) error {
 }
 
 // CacheGet updates the access record's latest get time for the document with the given Key.
-func (r *accessRecorder) CacheGet(key string) error {
+func (r *accessRecorder) CacheGet(key []byte) error {
 	return r.update(key, &storage.AccessRecord{CacheGetTimeLatest: time.Now()})
 }
 
 // LibriPut updates the access record's latest libri put time.
-func (r *accessRecorder) LibriPut(key string) error {
+func (r *accessRecorder) LibriPut(key []byte) error {
 	return r.update(key, &storage.AccessRecord{
 		LibriPutOccurred:     true,
 		LibriPutTimeEarliest: time.Now(),
@@ -59,10 +61,10 @@ func (r *accessRecorder) LibriPut(key string) error {
 }
 
 // CacheEvict deletes the access record for the documents with the given keys.
-func (r *accessRecorder) CacheEvict(keys []string) error {
+func (r *accessRecorder) CacheEvict(keys [][]byte) error {
 	dsKeys := make([]*datastore.Key, len(keys))
 	for i, key := range keys {
-		dsKeys[i] = datastore.NameKey(accessRecordKind, key, nil)
+		dsKeys[i] = datastore.NameKey(accessRecordKind, hex.EncodeToString(key), nil)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), r.params.DeleteTimeout)
 	defer cancel()
@@ -74,7 +76,7 @@ func (r *accessRecorder) CacheEvict(keys []string) error {
 }
 
 // GetNextEvictions gets the next batch of keys for documents to evict.
-func (r *accessRecorder) GetNextEvictions() ([]string, error) {
+func (r *accessRecorder) GetNextEvictions() ([][]byte, error) {
 	beforeDate := time.Now().Unix()/storage.SecsPerDay - int64(r.params.RecentWindowDays)
 
 	r.logger.Debug("finding evictable values", beforeDateFields(beforeDate)...)
@@ -92,7 +94,7 @@ func (r *accessRecorder) GetNextEvictions() ([]string, error) {
 		// don't evict anything since cache size smaller than size limit
 		r.logger.Debug("fewer evictable values than cache size",
 			nextEvictionsFields(nEvictable, r.params.LRUCacheSize)...)
-		return []string{}, nil
+		return [][]byte{}, nil
 	}
 	nToEvict := nEvictable - int(r.params.LRUCacheSize)
 	if nToEvict > int(r.params.EvictionBatchSize) {
@@ -116,13 +118,18 @@ func (r *accessRecorder) GetNextEvictions() ([]string, error) {
 			cancel()
 			return nil, err
 		}
-		heap.Push(evict, storage.KeyGetTime{Key: key.Name, GetTime: record.CacheGetTimeLatest})
+		keyBytes, err2 := hex.DecodeString(key.Name)
+		errors.MaybePanic(err2) // should never happen
+		heap.Push(evict, storage.KeyGetTime{
+			Key:     keyBytes,
+			GetTime: record.CacheGetTimeLatest,
+		})
 		if evict.Len() > nToEvict {
 			heap.Pop(evict)
 		}
 	}
 	cancel()
-	keyNames := make([]string, evict.Len())
+	keyNames := make([][]byte, evict.Len())
 	for i, kgt := range *evict {
 		keyNames[i] = kgt.Key
 	}
@@ -131,8 +138,8 @@ func (r *accessRecorder) GetNextEvictions() ([]string, error) {
 	return keyNames, nil
 }
 
-func (r *accessRecorder) update(key string, update *storage.AccessRecord) error {
-	dsKey := datastore.NameKey(accessRecordKind, key, nil)
+func (r *accessRecorder) update(key []byte, update *storage.AccessRecord) error {
+	dsKey := datastore.NameKey(accessRecordKind, hex.EncodeToString(key), nil)
 	existing := &storage.AccessRecord{}
 	ctx, cancel := context.WithTimeout(context.Background(), r.params.GetTimeout)
 	if err := r.client.Get(ctx, dsKey, existing); err != nil {
