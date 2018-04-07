@@ -107,11 +107,7 @@ func (c *Courier) startLibriPutters() {
 	go func() {
 		<-c.BaseServer.Stop
 		chMu.Lock()
-		select {
-		case <-c.libriPutQueue: // already closed
-		default:
-			close(c.libriPutQueue)
-		}
+		close(c.libriPutQueue)
 		chMu.Unlock()
 	}()
 
