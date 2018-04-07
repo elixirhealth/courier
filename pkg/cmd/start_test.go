@@ -107,6 +107,6 @@ func TestGetCacheStorageType(t *testing.T) {
 	viper.Set(cacheMemoryStorageFlag, false)
 	viper.Set(cacheDataStoreStorageFlag, false)
 	st, err = getCacheStorageType()
-	assert.Equal(t, errNoCacheStorageType, err)
+	assert.Equal(t, errNoStorageType, err)
 	assert.Equal(t, bstorage.Unspecified, st)
 }

@@ -47,7 +47,7 @@ var (
 	errMissingCatalog            = errors.New("missing catalog address")
 	errMissingKey                = errors.New("missing key address")
 	errMultipleCacheStorageTypes = errors.New("multiple cache storage types specified")
-	errNoCacheStorageType        = errors.New("no cache storage type specified")
+	errNoStorageType             = errors.New("no cache storage type specified")
 )
 
 var startCmd = &cobra.Command{
@@ -189,5 +189,5 @@ func getCacheStorageType() (bstorage.Type, error) {
 	if viper.GetBool(cacheDataStoreStorageFlag) {
 		return bstorage.DataStore, nil
 	}
-	return bstorage.Unspecified, errNoCacheStorageType
+	return bstorage.Unspecified, errNoStorageType
 }
