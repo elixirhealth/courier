@@ -477,7 +477,7 @@ func TestDatastoreAccessRecorder_Evict_ok(t *testing.T) {
 		logger: lg,
 	}
 	keys := []string{"key1", "key2"}
-	err := ds.Evict(keys)
+	err := ds.CacheEvict(keys)
 	assert.Nil(t, err)
 
 	expected := []*datastore.Key{
@@ -498,7 +498,7 @@ func TestDatastoreAccessRecorder_Evict_err(t *testing.T) {
 		logger: lg,
 	}
 	keys := []string{"key1", "key2"}
-	err := ds.Evict(keys)
+	err := ds.CacheEvict(keys)
 	assert.NotNil(t, err)
 }
 
@@ -685,9 +685,4 @@ func (r *fixedAccessRecorder) LibriPut(key string) error {
 
 func (r *fixedAccessRecorder) GetNextEvictions() ([]string, error) {
 	return r.nextEvictions, r.getEvictionBatchErr
-}
-
-func (r *fixedAccessRecorder) Evict(keys []string) error {
-	r.evictKeys = keys
-	return r.evictErr
 }

@@ -336,12 +336,12 @@ func TestGetNextEvictions(t *testing.T) {
 	sort.Strings(keys)
 	assert.Equal(t, []string{"key3", "key4"}, keys)
 
-	ar.Evict(keys)
+	ar.CacheEvict(keys)
 	keys, err = ar.GetNextEvictions()
 	assert.Nil(t, err)
 	assert.Equal(t, []string{"key5"}, keys)
 
-	ar.Evict(keys)
+	ar.CacheEvict(keys)
 	keys, err = ar.GetNextEvictions()
 	assert.Nil(t, err)
 	assert.Len(t, keys, 0)
@@ -362,7 +362,7 @@ func TestMemoryAccessRecorder_Evict_ok(t *testing.T) {
 		},
 		logger: lg,
 	}
-	err := ds.Evict(keys)
+	err := ds.CacheEvict(keys)
 	assert.Nil(t, err)
 	assert.Len(t, ds.records, 0)
 }
@@ -374,7 +374,7 @@ func TestMemoryAccessRecorder_Evict_err(t *testing.T) {
 		records: map[string]*storage.AccessRecord{},
 		logger:  lg,
 	}
-	err := ds.Evict(keys)
+	err := ds.CacheEvict(keys)
 	assert.Equal(t, storage.ErrMissingValue, err)
 }
 
@@ -407,9 +407,4 @@ func (r *fixedAccessRecorder) LibriPut(key string) error {
 
 func (r *fixedAccessRecorder) GetNextEvictions() ([]string, error) {
 	return r.nextEvictions, r.getEvictionBatchErr
-}
-
-func (r *fixedAccessRecorder) Evict(keys []string) error {
-	r.evictKeys = keys
-	return r.evictErr
 }
