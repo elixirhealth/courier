@@ -31,7 +31,7 @@ func logAccessRecordInsert(q sq.InsertBuilder, at accessType) []zapcore.Field {
 	qSQL, args, err := q.ToSql()
 	errors.MaybePanic(err)
 	return []zapcore.Field{
-		zap.Stringer(logAccessType, at),
+		zap.String(logAccessType, at.string()),
 		zap.String(logSQL, qSQL),
 		zap.Array(logArgs, queryArgs(args)),
 	}
@@ -58,7 +58,7 @@ func logAccessRecordDeleted(keys [][]byte, r sql.Result) []zapcore.Field {
 func logKeyAccessType(key []byte, at accessType) []zapcore.Field {
 	return []zapcore.Field{
 		zap.String(logKey, hex.EncodeToString(key)),
-		zap.Stringer(logAccessType, at),
+		zap.String(logAccessType, at.string()),
 	}
 }
 

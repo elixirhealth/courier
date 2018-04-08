@@ -9,7 +9,7 @@ import (
 
 	sq "github.com/Masterminds/squirrel"
 	errors2 "github.com/drausin/libri/libri/common/errors"
-	"github.com/elixirhealth/courier/pkg/server/storage"
+	stg "github.com/elixirhealth/courier/pkg/server/storage"
 	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -41,7 +41,7 @@ var (
 	fqAccessRecordTable = cacheSchema + "." + accessRecordTable
 
 	errEmptyDBUrl            = errors.New("empty DB URL")
-	errUnexpectedStorageType = errors.New("unexpected storage type")
+	errUnexpectedStorageType = errors.New("unexpected stg type")
 )
 
 type accessType int
@@ -52,7 +52,7 @@ const (
 	cacheGet
 )
 
-func (at accessType) String() string {
+func (at accessType) string() string {
 	switch at {
 	case cachePut:
 		return "CACHE_PUT"
@@ -66,16 +66,15 @@ func (at accessType) String() string {
 }
 
 type accessRecorder struct {
-	params  *storage.Parameters
+	params  *stg.Parameters
 	db      *sql.DB
 	dbCache sq.DBProxyContext
 	qr      bstorage.Querier
 	logger  *zap.Logger
 }
 
-func New(
-	dbURL string, params *storage.Parameters, logger *zap.Logger,
-) (storage.AccessRecorder, error) {
+// New returns a new AccessRecorder backed by a Postgres DB.
+func New(dbURL string, params *stg.Parameters, logger *zap.Logger) (stg.AccessRecorder, error) {
 	if dbURL == "" {
 		return nil, errEmptyDBUrl
 	}
@@ -128,7 +127,7 @@ func (ar *accessRecorder) CacheEvict(keys [][]byte) error {
 
 // GetNextEvictions gets the next batch of keys for documents to evict.
 func (ar *accessRecorder) GetNextEvictions() ([][]byte, error) {
-	beforeMin := time.Now().Unix()/60 - int64(ar.params.RecentWindowDays)*storage.MinsPerDay
+	beforeMin := time.Now().Unix()/60 - int64(ar.params.RecentWindowDays)*stg.MinsPerDay
 	q := addEvictableClauses(beforeMin, psql.RunWith(ar.dbCache).Select(count))
 	ar.logger.Debug("finding evictable values", logEvictableQuery(q, beforeMin)...)
 	ctx, cancel := context.WithTimeout(context.Background(), ar.params.GetTimeout)
@@ -163,7 +162,7 @@ func (ar *accessRecorder) GetNextEvictions() ([][]byte, error) {
 		return nil, err
 	}
 
-	keys := make([][]byte, nEvictable)
+	keys := make([][]byte, nToEvict)
 	i := 0
 	for rows.Next() {
 		if err2 := rows.Scan(&keys[i]); err2 != nil {

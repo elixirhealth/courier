@@ -2,11 +2,14 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log"
 	"os"
+	"reflect"
 	"testing"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/drausin/libri/libri/common/logging"
 	"github.com/elixirhealth/courier/pkg/server/storage"
 	"github.com/elixirhealth/courier/pkg/server/storage/postgres/migrations"
@@ -21,6 +24,11 @@ var (
 
 	errTest = errors.New("test error")
 )
+
+// Most of the happy/ok path is tested through actual queries to Postgres DB. While this kind of
+// integration-y testing is less desirable than unit testing, much of the AccessRecorder logic
+// lies in the SQL queries and DB structure and indices, which would be harder and more confusing
+// to mock than just to use the real thing. Error path tests use a combo of mocks and DB.
 
 func TestMain(m *testing.M) {
 	dbURL, cleanup, err := bstorage.StartTestPostgres()
@@ -174,7 +182,29 @@ func TestAccessRecorder_CacheGet_ok(t *testing.T) {
 	assert.Equal(t, 2, nPut)
 }
 
-func TestAccessRecorder_CacheEvict(t *testing.T) {
+func TestAccessRecorder_PutGet_err(t *testing.T) {
+	params := storage.NewDefaultParameters()
+	params.Type = bstorage.Postgres
+	lg := zap.NewNop() // logging.NewDevLogger(zap.DebugLevel)
+
+	ar := &accessRecorder{
+		params: params,
+		logger: lg,
+		qr:     &fixedQuerier{insertErr: errTest},
+	}
+	key := []byte{1, 2, 3}
+
+	err := ar.CachePut(key)
+	assert.Equal(t, errTest, err)
+
+	err = ar.LibriPut(key)
+	assert.Equal(t, errTest, err)
+
+	err = ar.CacheGet(key)
+	assert.Equal(t, errTest, err)
+}
+
+func TestAccessRecorder_CacheEvict_ok(t *testing.T) {
 	dbURL, tearDown := setUpPostgresTest(t)
 	defer func() {
 		err := tearDown()
@@ -212,7 +242,22 @@ func TestAccessRecorder_CacheEvict(t *testing.T) {
 	assert.Equal(t, 1, nPut)
 }
 
-func TestAccessRecorder_GetNextEvictions(t *testing.T) {
+func TestAccessRecorder_CacheEvict_err(t *testing.T) {
+	params := storage.NewDefaultParameters()
+	params.Type = bstorage.Postgres
+	lg := zap.NewNop() // logging.NewDevLogger(zap.DebugLevel)
+
+	ar := &accessRecorder{
+		params: params,
+		logger: lg,
+		qr:     &fixedQuerier{deleteErr: errTest},
+	}
+
+	err := ar.CacheEvict([][]byte{{1}, {2}})
+	assert.Equal(t, errTest, err)
+}
+
+func TestAccessRecorder_GetNextEvictions_ok(t *testing.T) {
 	dbURL, tearDown := setUpPostgresTest(t)
 	defer func() {
 		err := tearDown()
@@ -223,7 +268,7 @@ func TestAccessRecorder_GetNextEvictions(t *testing.T) {
 	params.Type = bstorage.Postgres
 	params.RecentWindowDays = 0
 	params.LRUCacheSize = 1
-	lg := logging.NewDevLogger(zap.DebugLevel)
+	lg := zap.NewNop() // logging.NewDevLogger(zap.DebugLevel)
 
 	ar, err := New(dbURL, params, lg)
 	assert.Nil(t, err)
@@ -244,4 +289,162 @@ func TestAccessRecorder_GetNextEvictions(t *testing.T) {
 	evictable, err := ar.GetNextEvictions()
 	assert.Nil(t, err)
 	assert.Equal(t, [][]byte{key1, key2}, evictable)
+
+	// evict key1 & key2
+	err = ar.CacheEvict(evictable)
+	assert.Nil(t, err)
+
+	// no more evictable keys, since LRU cache is 1
+	evictable, err = ar.GetNextEvictions()
+	assert.Nil(t, err)
+	assert.Empty(t, evictable)
+}
+
+func TestAccessRecorder_GetNextEvictions_err(t *testing.T) {
+	params := storage.NewDefaultParameters()
+	params.Type = bstorage.Postgres
+	params.LRUCacheSize = 1
+	lg := logging.NewDevLogger(zap.DebugLevel)
+
+	cases := map[string]*accessRecorder{
+		"evictable count scan err": {
+			params: params,
+			logger: lg,
+			qr: &fixedQuerier{
+				selectRowResult: &fixedRowScanner{err: errTest},
+			},
+		},
+		"evictable keys query err": {
+			params: params,
+			logger: lg,
+			qr: &fixedQuerier{
+				selectRowResult: &fixedRowScanner{val: 2},
+				selectErr:       errTest,
+			},
+		},
+		"evictable keys scan err": {
+			params: params,
+			logger: lg,
+			qr: &fixedQuerier{
+				selectRowResult: &fixedRowScanner{val: 2},
+				selectResult: &fixedQueryRows{
+					next:    true,
+					scanErr: errTest,
+				},
+			},
+		},
+		"evictable keys err err": {
+			params: params,
+			logger: lg,
+			qr: &fixedQuerier{
+				selectRowResult: &fixedRowScanner{val: 2},
+				selectResult: &fixedQueryRows{
+					next:   false,
+					errErr: errTest,
+				},
+			},
+		},
+		"evictable keys close err": {
+			params: params,
+			logger: lg,
+			qr: &fixedQuerier{
+				selectRowResult: &fixedRowScanner{val: 2},
+				selectResult: &fixedQueryRows{
+					next:     false,
+					closeErr: errTest,
+				},
+			},
+		},
+	}
+
+	for desc, c := range cases {
+		evictions, err := c.GetNextEvictions()
+		assert.Equal(t, errTest, err, desc)
+		assert.Nil(t, evictions)
+	}
+}
+
+type fixedQuerier struct {
+	selectResult    bstorage.QueryRows
+	selectErr       error
+	selectRowResult sq.RowScanner
+	insertResult    sql.Result
+	insertErr       error
+	deleteResult    sql.Result
+	deleteErr       error
+}
+
+func (f *fixedQuerier) SelectQueryContext(
+	ctx context.Context, b sq.SelectBuilder,
+) (bstorage.QueryRows, error) {
+	return f.selectResult, f.selectErr
+}
+
+func (f *fixedQuerier) SelectQueryRowContext(
+	ctx context.Context, b sq.SelectBuilder,
+) sq.RowScanner {
+	return f.selectRowResult
+}
+
+func (f *fixedQuerier) InsertExecContext(
+	ctx context.Context, b sq.InsertBuilder,
+) (sql.Result, error) {
+	return f.insertResult, f.insertErr
+}
+
+func (f *fixedQuerier) UpdateExecContext(
+	ctx context.Context, b sq.UpdateBuilder,
+) (sql.Result, error) {
+	panic("implement me")
+}
+
+func (f *fixedQuerier) DeleteExecContext(
+	ctx context.Context, b sq.DeleteBuilder,
+) (sql.Result, error) {
+	return f.deleteResult, f.deleteErr
+}
+
+type fixedRowScanner struct {
+	val int
+	err error
+}
+
+func (f *fixedRowScanner) Scan(dests ...interface{}) error {
+	if f.err != nil {
+		return f.err
+	}
+	srcRef := reflect.ValueOf(f.val)
+	vp := reflect.ValueOf(dests[0])
+	vp.Elem().Set(srcRef)
+	return nil
+}
+
+type fixedQueryRows struct {
+	next     bool
+	scanVal  interface{}
+	scanErr  error
+	errErr   error
+	closeErr error
+}
+
+func (f *fixedQueryRows) Close() error {
+	return f.closeErr
+}
+
+func (f *fixedQueryRows) Err() error {
+	return f.errErr
+}
+
+func (f *fixedQueryRows) Next() bool {
+	return f.next
+}
+
+func (f *fixedQueryRows) Scan(dest ...interface{}) error {
+	if f.scanErr != nil {
+		return f.scanErr
+	}
+
+	// assume just single dest
+	dest[0] = &f.scanVal
+	return nil
 }
