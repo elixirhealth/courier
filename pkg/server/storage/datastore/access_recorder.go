@@ -129,13 +129,13 @@ func (r *accessRecorder) GetNextEvictions() ([][]byte, error) {
 		}
 	}
 	cancel()
-	keyNames := make([][]byte, evict.Len())
+	keys := make([][]byte, evict.Len())
 	for i, kgt := range *evict {
-		keyNames[i] = kgt.Key
+		keys[i] = kgt.Key
 	}
 	r.logger.Debug("found evictable values",
 		nextEvictionsFields(evict.Len(), r.params.LRUCacheSize)...)
-	return keyNames, nil
+	return keys, nil
 }
 
 func (r *accessRecorder) update(key []byte, update *storage.AccessRecord) error {

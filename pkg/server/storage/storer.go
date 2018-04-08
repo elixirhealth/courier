@@ -34,6 +34,9 @@ const (
 	// KeySize is size of the length of a document ID
 	KeySize = id.Length
 
+	// MinsPerDay is the number of minutes in a day.
+	MinsPerDay = 60 * 24
+
 	// SecsPerDay is the number of seconds in a day.
 	SecsPerDay = 60 * 60 * 24
 )
@@ -73,14 +76,14 @@ type AccessRecorder interface {
 	// the given Key.
 	CachePut(key []byte) error
 
+	// LibriPut updates the access record's latest libri put time.
+	LibriPut(key []byte) error
+
 	// CacheGet updates the access record's latest get time for the document with the given Key.
 	CacheGet(key []byte) error
 
 	// CacheEvict deletes the access record for the documents with the given keys.
 	CacheEvict(keys [][]byte) error
-
-	// LibriPut updates the access record's latest libri put time.
-	LibriPut(key []byte) error
 
 	// GetNextEvictions gets the next batch of keys for documents to evict, which is determines
 	// by documents satisfying

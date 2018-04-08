@@ -10,16 +10,15 @@ import (
 )
 
 const (
-	logKey           = "key"
-	logValue         = "value"
-	logFrom          = "from"
-	logTo            = "to"
-	logBeforeDate    = "before_date"
-	logBeforeDateISO = "before_date_iso"
-	logNEvictable    = "n_evictable"
-	logNEvicted      = "n_evicted"
-	logNToEvict      = "n_to_evict"
-
+	logKey               = "key"
+	logValue             = "value"
+	logFrom              = "from"
+	logTo                = "to"
+	logBeforeDate        = "before_date"
+	logBeforeDateISO     = "before_date_iso"
+	logNEvictable        = "n_evictable"
+	logNEvicted          = "n_evicted"
+	logNToEvict          = "n_to_evict"
 	logLRUCacheSize      = "lru_cache_size"
 	logEvictionBatchSize = "eviction_batch_size"
 	logNValues           = "n_values"

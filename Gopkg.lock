@@ -125,7 +125,7 @@
     "pkg/util",
     "pkg/version"
   ]
-  revision = "c18df6d2a07df67d38b052228c193203ce421ff5"
+  revision = "bc1e2adfc10954134cefd4979f6ad9619c7eb081"
 
 [[projects]]
   name = "github.com/ethereum/go-ethereum"
