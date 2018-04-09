@@ -3,7 +3,6 @@ jobs:
   build:
     docker:
       - image: gcr.io/elixir-core-prod/service-base-build:latest
-        user: root
         auth:
           username: _json_key
           password: $GCR_SVC_JSON
@@ -48,14 +47,7 @@ jobs:
       - run:
           name: publish docker image
           command: |
-            if [[ "${CIRCLE_BRANCH}" == "master" ]]; then
+            if [[ "${CIRCLE_BRANCH}" == "master" || "${CIRCLE_BRANCH}" == "develop" ]]; then
               docker login -u _json_key -p "${GCR_SVC_JSON}" gcr.io
-              COURIER_VERSION=$(./deploy/bin/courier version)
-              docker tag gcr.io/elixir-core-prod/courier:snapshot gcr.io/elixir-core-prod/courier:${COURIER_VERSION}
-              docker tag gcr.io/elixir-core-prod/courier:snapshot gcr.io/elixir-core-prod/courier:latest
-              docker push gcr.io/elixir-core-prod/courier:${COURIER_VERSION}
-              docker push gcr.io/elixir-core-prod/courier:latest
-            elif [[ "${CIRCLE_BRANCH}" == "develop" ]]; then
-              docker login -u _json_key -p "${GCR_SVC_JSON}" gcr.io
-              docker push gcr.io/elixir-core-prod/courier:snapshot
+              ./vendor/github.com/elixirhealth/service-base/scripts/publish courier ${CIRCLE_BRANCH}
             fi
