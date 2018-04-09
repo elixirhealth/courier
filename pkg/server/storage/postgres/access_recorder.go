@@ -151,10 +151,10 @@ func (ar *accessRecorder) GetNextEvictions() ([][]byte, error) {
 		}
 		i++
 	}
-	if err2 := rows.Err(); err2 != nil {
+	if err2 := rows.Close(); err2 != nil {
 		return nil, err2
 	}
-	if err2 := rows.Close(); err2 != nil {
+	if err2 := rows.Err(); err2 != nil {
 		return nil, err2
 	}
 
