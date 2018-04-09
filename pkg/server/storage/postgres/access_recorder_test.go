@@ -4,13 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"reflect"
 	"testing"
 
 	sq "github.com/Masterminds/squirrel"
-	"github.com/drausin/libri/libri/common/logging"
+	errors2 "github.com/drausin/libri/libri/common/errors"
 	"github.com/elixirhealth/courier/pkg/server/storage"
 	"github.com/elixirhealth/courier/pkg/server/storage/postgres/migrations"
 	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
@@ -69,7 +70,7 @@ func TestAccessRecorder_CachePut_ok(t *testing.T) {
 	params.Type = bstorage.Postgres
 	lg := zap.NewNop() // logging.NewDevLogger(zap.DebugLevel)
 
-	ar, err := New(dbURL, params, lg)
+	ar, err := newAccessRecorder(dbURL, params, lg)
 	assert.Nil(t, err)
 
 	key := []byte{1, 2, 3}
@@ -107,7 +108,7 @@ func TestAccessRecorder_LibriPut_ok(t *testing.T) {
 	params.Type = bstorage.Postgres
 	lg := zap.NewNop() // logging.NewDevLogger(zap.DebugLevel)
 
-	ar, err := New(dbURL, params, lg)
+	ar, err := newAccessRecorder(dbURL, params, lg)
 	assert.Nil(t, err)
 	key := []byte{1, 2, 3}
 
@@ -148,7 +149,7 @@ func TestAccessRecorder_CacheGet_ok(t *testing.T) {
 	params.Type = bstorage.Postgres
 	lg := zap.NewNop() // logging.NewDevLogger(zap.DebugLevel)
 
-	ar, err := New(dbURL, params, lg)
+	ar, err := newAccessRecorder(dbURL, params, lg)
 	assert.Nil(t, err)
 	key := []byte{1, 2, 3}
 
@@ -215,7 +216,7 @@ func TestAccessRecorder_CacheEvict_ok(t *testing.T) {
 	params.Type = bstorage.Postgres
 	lg := zap.NewNop() // logging.NewDevLogger(zap.DebugLevel)
 
-	ar, err := New(dbURL, params, lg)
+	ar, err := newAccessRecorder(dbURL, params, lg)
 	assert.Nil(t, err)
 	key1, key2 := []byte{1, 2, 3}, []byte{4, 5, 6}
 
@@ -270,7 +271,7 @@ func TestAccessRecorder_GetNextEvictions_ok(t *testing.T) {
 	params.LRUCacheSize = 1
 	lg := zap.NewNop() // logging.NewDevLogger(zap.DebugLevel)
 
-	ar, err := New(dbURL, params, lg)
+	ar, err := newAccessRecorder(dbURL, params, lg)
 	assert.Nil(t, err)
 	key1, key2, key3, key4 := []byte{1}, []byte{2}, []byte{3}, []byte{4}
 
@@ -304,7 +305,7 @@ func TestAccessRecorder_GetNextEvictions_err(t *testing.T) {
 	params := storage.NewDefaultParameters()
 	params.Type = bstorage.Postgres
 	params.LRUCacheSize = 1
-	lg := logging.NewDevLogger(zap.DebugLevel)
+	lg := zap.NewNop() // logging.NewDevLogger(zap.DebugLevel)
 
 	cases := map[string]*accessRecorder{
 		"evictable count scan err": {
@@ -362,6 +363,24 @@ func TestAccessRecorder_GetNextEvictions_err(t *testing.T) {
 		assert.Equal(t, errTest, err, desc)
 		assert.Nil(t, evictions)
 	}
+}
+
+func newAccessRecorder(
+	dbURL string, params *storage.Parameters, logger *zap.Logger,
+) (storage.AccessRecorder, error) {
+	db, err := sql.Open("postgres", dbURL)
+	errors2.MaybePanic(err)
+	return &accessRecorder{
+		params:  params,
+		db:      db,
+		dbCache: sq.NewStmtCacher(db),
+		qr:      bstorage.NewQuerier(),
+		logger:  logger,
+	}, nil
+}
+
+func notNull(expr string) string {
+	return fmt.Sprintf("%s IS NOT NULL", expr)
 }
 
 type fixedQuerier struct {

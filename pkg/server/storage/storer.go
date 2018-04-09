@@ -34,6 +34,9 @@ const (
 	// KeySize is size of the length of a document ID
 	KeySize = id.Length
 
+	// MaxValueSize is the maximum allowed size of a serialized document value.
+	MaxValueSize = 2*1024*1024 + 1024
+
 	// MinsPerDay is the number of minutes in a day.
 	MinsPerDay = 60 * 24
 

@@ -9,7 +9,7 @@ import (
 
 	sq "github.com/Masterminds/squirrel"
 	errors2 "github.com/drausin/libri/libri/common/errors"
-	stg "github.com/elixirhealth/courier/pkg/server/storage"
+	"github.com/elixirhealth/courier/pkg/server/storage"
 	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -41,7 +41,7 @@ var (
 	fqAccessRecordTable = cacheSchema + "." + accessRecordTable
 
 	errEmptyDBUrl            = errors.New("empty DB URL")
-	errUnexpectedStorageType = errors.New("unexpected stg type")
+	errUnexpectedStorageType = errors.New("unexpected storage type")
 )
 
 type accessType int
@@ -66,30 +66,11 @@ func (at accessType) string() string {
 }
 
 type accessRecorder struct {
-	params  *stg.Parameters
+	params  *storage.Parameters
 	db      *sql.DB
 	dbCache sq.DBProxyContext
 	qr      bstorage.Querier
 	logger  *zap.Logger
-}
-
-// New returns a new AccessRecorder backed by a Postgres DB.
-func New(dbURL string, params *stg.Parameters, logger *zap.Logger) (stg.AccessRecorder, error) {
-	if dbURL == "" {
-		return nil, errEmptyDBUrl
-	}
-	if params.Type != bstorage.Postgres {
-		return nil, errUnexpectedStorageType
-	}
-	db, err := sql.Open("postgres", dbURL)
-	errors2.MaybePanic(err)
-	return &accessRecorder{
-		params:  params,
-		db:      db,
-		dbCache: sq.NewStmtCacher(db),
-		qr:      bstorage.NewQuerier(),
-		logger:  logger,
-	}, nil
 }
 
 // CachePut creates a new access record with the cache's put time for the document with the given
@@ -127,7 +108,7 @@ func (ar *accessRecorder) CacheEvict(keys [][]byte) error {
 
 // GetNextEvictions gets the next batch of keys for documents to evict.
 func (ar *accessRecorder) GetNextEvictions() ([][]byte, error) {
-	beforeMin := time.Now().Unix()/60 - int64(ar.params.RecentWindowDays)*stg.MinsPerDay
+	beforeMin := time.Now().Unix()/60 - int64(ar.params.RecentWindowDays)*storage.MinsPerDay
 	q := addEvictableClauses(beforeMin, psql.RunWith(ar.dbCache).Select(count))
 	ar.logger.Debug("finding evictable values", logEvictableQuery(q, beforeMin)...)
 	ctx, cancel := context.WithTimeout(context.Background(), ar.params.GetTimeout)
@@ -247,10 +228,6 @@ func getAccessRecordStmtValues(key []byte, rt accessType) map[string]interface{}
 
 func andJoin(preds ...string) string {
 	return strings.Join(preds, andSpace)
-}
-
-func notNull(expr string) string {
-	return fmt.Sprintf("%s IS NOT NULL", expr)
 }
 
 func tbl1Col(col string) string {

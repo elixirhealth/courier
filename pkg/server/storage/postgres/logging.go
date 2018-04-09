@@ -7,6 +7,7 @@ import (
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/drausin/libri/libri/common/errors"
+	"github.com/dustin/go-humanize"
 	"github.com/elixirhealth/courier/pkg/server/storage"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -16,6 +17,8 @@ const (
 	logSQL               = "sql"
 	logArgs              = "args"
 	logKey               = "key"
+	logValueSize         = "value_size"
+	logValueSizeHuman    = "value_size_human"
 	logNKeys             = "n_keys"
 	logNDeleted          = "n_deleted"
 	logAccessType        = "access_type"
@@ -84,6 +87,24 @@ func logEvictKeys(q sq.SelectBuilder, nToEvict int) []zapcore.Field {
 	}
 }
 
+func logCacheGet(q sq.SelectBuilder, key []byte) []zapcore.Field {
+	qSQL, args, err := q.ToSql()
+	errors.MaybePanic(err)
+	return []zapcore.Field{
+		zap.String(logKey, hex.EncodeToString(key)),
+		zap.String(logSQL, qSQL),
+		zap.Array(logArgs, queryArgs(args)),
+	}
+}
+
+func logKeyValue(key, value []byte) []zapcore.Field {
+	return []zapcore.Field{
+		zap.String(logKey, hex.EncodeToString(key)),
+		zap.Int(logValueSize, len(value)),
+		zap.String(logValueSizeHuman, humanize.Bytes(uint64(len(value)))),
+	}
+}
+
 func nextEvictionsFields(nEvictable int, lruCacheSize uint) []zapcore.Field {
 	return []zapcore.Field{
 		zap.Int(logNEvictable, nEvictable),
@@ -97,6 +118,15 @@ func evictableValuesFields(nEvictable, nToEvict int, p *storage.Parameters) []za
 		zap.Int(logNToEvict, nToEvict),
 		zap.Uint(logLRUCacheSize, p.LRUCacheSize),
 		zap.Uint(logEvictionBatchSize, p.EvictionBatchSize),
+	}
+}
+
+func logCacheEvict(q sq.DeleteBuilder, keys [][]byte) []zapcore.Field {
+	qSQL, _, err := q.ToSql()
+	errors.MaybePanic(err)
+	return []zapcore.Field{
+		zap.String(logSQL, qSQL),
+		zap.Int(logNKeys, len(keys)),
 	}
 }
 
