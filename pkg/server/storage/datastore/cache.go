@@ -31,7 +31,7 @@ type cache struct {
 	logger         *zap.Logger
 }
 
-// New creates a new GCP DataStore Storage instance. This function assumes the following:
+// New creates a new GCP DataStore Cache instance. This function assumes the following:
 // - if DATASTORE_EMULATOR_HOST env var is set, it uses that instead of project
 // - production creds use GOOGLE_APPLICATION_CREDENTIALS env var to point to the credentials JSON
 // file
@@ -64,6 +64,9 @@ func (c *cache) Put(key []byte, value []byte) error {
 	logger.Debug("putting into cache")
 	if len(key) != storage.KeySize {
 		return storage.ErrInvalidKeySize
+	}
+	if len(value) > storage.MaxValueSize {
+		return storage.ErrValueTooLarge
 	}
 	dsKey := datastore.NameKey(documentKind, keyHex, nil)
 	existingValue := &MarshaledDocument{}
@@ -124,19 +127,19 @@ func (c *cache) Get(key []byte) ([]byte, error) {
 // EvictNext removes the next batch of documents eligible for eviction from the cache.
 func (c *cache) EvictNext() error {
 	c.logger.Debug("beginning next eviction")
-	keyNames, err := c.accessRecorder.GetNextEvictions()
+	keys, err := c.accessRecorder.GetNextEvictions()
 	if err != nil {
 		return err
 	}
-	if len(keyNames) == 0 {
+	if len(keys) == 0 {
 		c.logger.Debug("evicted no documents")
 		return nil
 	}
-	dsKeys := make([]*datastore.Key, len(keyNames))
-	for i, keyName := range keyNames {
-		dsKeys[i] = datastore.NameKey(documentKind, hex.EncodeToString(keyName), nil)
+	dsKeys := make([]*datastore.Key, len(keys))
+	for i, key := range keys {
+		dsKeys[i] = datastore.NameKey(documentKind, hex.EncodeToString(key), nil)
 	}
-	if err = c.accessRecorder.CacheEvict(keyNames); err != nil {
+	if err = c.accessRecorder.CacheEvict(keys); err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), c.params.DeleteTimeout)

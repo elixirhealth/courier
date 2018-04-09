@@ -125,7 +125,7 @@
     "pkg/util",
     "pkg/version"
   ]
-  revision = "c18df6d2a07df67d38b052228c193203ce421ff5"
+  revision = "bc1e2adfc10954134cefd4979f6ad9619c7eb081"
 
 [[projects]]
   name = "github.com/ethereum/go-ethereum"
@@ -563,6 +563,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "ced7dc944041a666693a881176f831c440972a0f1f1e65eb012f367c5573ea29"
+  inputs-digest = "426ea1aa5549c6617cabed06ee5dfbb9b2f61122fbd771ce42b27f557efa1d42"
   solver-name = "gps-cdcl"
   solver-version = 1

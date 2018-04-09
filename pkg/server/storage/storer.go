@@ -34,6 +34,12 @@ const (
 	// KeySize is size of the length of a document ID
 	KeySize = id.Length
 
+	// MaxValueSize is the maximum allowed size of a serialized document value.
+	MaxValueSize = 2*1024*1024 + 1024
+
+	// MinsPerDay is the number of minutes in a day.
+	MinsPerDay = 60 * 24
+
 	// SecsPerDay is the number of seconds in a day.
 	SecsPerDay = 60 * 60 * 24
 )
@@ -73,14 +79,14 @@ type AccessRecorder interface {
 	// the given Key.
 	CachePut(key []byte) error
 
+	// LibriPut updates the access record's latest libri put time.
+	LibriPut(key []byte) error
+
 	// CacheGet updates the access record's latest get time for the document with the given Key.
 	CacheGet(key []byte) error
 
 	// CacheEvict deletes the access record for the documents with the given keys.
 	CacheEvict(keys [][]byte) error
-
-	// LibriPut updates the access record's latest libri put time.
-	LibriPut(key []byte) error
 
 	// GetNextEvictions gets the next batch of keys for documents to evict, which is determines
 	// by documents satisfying
@@ -133,8 +139,7 @@ func NewDefaultParameters() *Parameters {
 	}
 }
 
-// AccessRecord contains access times for Puts and Gets for a particular document. It is only
-// exported so the DataStore API can reflect on it.
+// AccessRecord contains access times for Puts and Gets for a particular document.
 type AccessRecord struct {
 	CachePutDateEarliest int64     `datastore:"cache_put_date_earliest"`
 	CachePutTimeEarliest time.Time `datastore:"cache_put_time_earliest,noindex"`
