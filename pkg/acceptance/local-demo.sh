@@ -77,8 +77,8 @@ name="catalog-0"
 docker run --name "${name}" --net=courier -d -p ${port}:${port} ${CATALOG_IMAGE} \
     start \
     --logLevel "${CATALOG_LOG_LEVEL}" \
-    --storageMemory \
-    --serverPort ${port}
+    --serverPort ${port} \
+    --storageMemory
 catalog_addr="${name}:${port}"
 catalog_containers="${name}"
 
@@ -95,7 +95,8 @@ name="key-0"
 docker run --name "${name}" --net=courier -d -p ${port}:${port} ${KEY_IMAGE} \
     start \
     --logLevel "${KEY_LOG_LEVEL}" \
-    --serverPort ${port}
+    --serverPort ${port} \
+    --storageMemory
 key_addr="${name}:${port}"
 key_containers="${name}"
 
@@ -115,7 +116,8 @@ docker run --name "${name}" --net=courier -d -p ${port}:${port} ${COURIER_IMAGE}
     --serverPort ${port} \
     --librarians ${librarian_addrs} \
     --key ${key_addr} \
-    --catalog ${catalog_addr}
+    --catalog ${catalog_addr} \
+    --storageMemory
 courier_addrs="${name}:${port}"
 courier_containers="${name}"
 
