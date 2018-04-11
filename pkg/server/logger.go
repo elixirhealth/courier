@@ -3,19 +3,14 @@ package server
 import (
 	"encoding/hex"
 
-	"github.com/drausin/libri/libri/common/id"
 	"github.com/elixirhealth/catalog/pkg/catalogapi"
-	"github.com/elixirhealth/courier/pkg/courierapi"
 	"github.com/elixirhealth/key/pkg/keyapi"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
 const (
-	logDocKey    = "document_key"
-	logKey       = "key"
-	logOperation = "operation"
-
+	logKey                 = "key"
 	logLibriGetTimeout     = "libri_get_timeout"
 	logLibriPutTimeout     = "libri_put_timeout"
 	logLibriPutQueueSize   = "libri_put_queue_size"
@@ -34,13 +29,6 @@ const (
 	logReaderEntityID      = "reader_entity_id"
 	logEnvelopeKey         = "envelope_key"
 )
-
-func putDocumentFields(rq *courierapi.PutRequest, rp *courierapi.PutResponse) []zapcore.Field {
-	return []zapcore.Field{
-		zap.String(logKey, id.Hex(rq.Key)),
-		zap.String(logOperation, courierapi.PutOperation_name[int32(rp.Operation)]),
-	}
-}
 
 func logGetEntityIDs(rq *keyapi.GetPublicKeyDetailsRequest) []zapcore.Field {
 	return []zapcore.Field{

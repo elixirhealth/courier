@@ -20,8 +20,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 var (
@@ -188,14 +186,8 @@ func TestCourier_startCatalogPutters_ok(t *testing.T) {
 	c, err := newCourier(okConfig)
 	assert.Nil(t, err)
 
-	catalogClient := &fixedCatalogClient{}
-	c.catalog = catalogClient
-	c.key = &fixedKeyClient{
-		getPKD: []*keyapi.PublicKeyDetail{
-			{EntityId: "some author ID"},
-			{EntityId: "some reader ID"},
-		},
-	}
+	cp := &fixedCatalogPutter{}
+	c.catalogPutter = cp
 	pub := &libriapi.Publication{
 		EnvelopeKey:     util.RandBytes(rng, 32),
 		EntryKey:        util.RandBytes(rng, 32),
@@ -217,7 +209,7 @@ func TestCourier_startCatalogPutters_ok(t *testing.T) {
 	c.StopServer()
 
 	wg1.Wait()
-	assert.Equal(t, 1, catalogClient.nPuts)
+	assert.Equal(t, 1, cp.nPuts)
 }
 
 func TestCourier_startCatalogPutters_err(t *testing.T) {
@@ -232,10 +224,7 @@ func TestCourier_startCatalogPutters_err(t *testing.T) {
 	// check enough catalog put errors should cause it to stop
 	c, err := newCourier(okConfig)
 	assert.Nil(t, err)
-	catalogClient := &fixedCatalogClient{
-		putErr: errTest,
-	}
-	c.catalog = catalogClient
+	c.catalogPutter = &fixedCatalogPutter{putErr: errTest}
 	for i := 0; i < catalogPutterErrQueueSize; i++ {
 		c.catalogPutQueue <- &subscribe.KeyedPub{
 			Key:   id.NewPseudoRandom(rng),
@@ -249,90 +238,6 @@ func TestCourier_startCatalogPutters_err(t *testing.T) {
 		// check that publish errors put keys back onto the queue
 		<-c.catalogPutQueue
 	}
-}
-
-func TestCourier_putCatalog_ok(t *testing.T) {
-	rng := rand.New(rand.NewSource(0))
-	authorEntityID, readerEntityID := "author entity ID", "reader entity ID"
-
-	c, err := newCourier(okConfig)
-	assert.Nil(t, err)
-	catClient := &fixedCatalogClient{}
-	c.catalog = catClient
-	c.key = &fixedKeyClient{
-		getPKD: []*keyapi.PublicKeyDetail{
-			{EntityId: authorEntityID},
-			{EntityId: readerEntityID},
-		},
-	}
-
-	// entity IDs already exist in PR
-	pr := &catalogapi.PublicationReceipt{
-		EnvelopeKey:     util.RandBytes(rng, 32),
-		EntryKey:        util.RandBytes(rng, 32),
-		AuthorPublicKey: util.RandBytes(rng, 33),
-		AuthorEntityId:  authorEntityID,
-		ReaderPublicKey: util.RandBytes(rng, 33),
-		ReaderEntityId:  readerEntityID,
-	}
-	err = c.putCatalog(pr)
-	assert.Nil(t, err)
-	assert.Equal(t, authorEntityID, catClient.putRq.Value.AuthorEntityId)
-	assert.Equal(t, readerEntityID, catClient.putRq.Value.ReaderEntityId)
-
-	// entity IDs don't exist
-	pr = &catalogapi.PublicationReceipt{
-		EnvelopeKey:     util.RandBytes(rng, 32),
-		EntryKey:        util.RandBytes(rng, 32),
-		AuthorPublicKey: util.RandBytes(rng, 33),
-		ReaderPublicKey: util.RandBytes(rng, 33),
-	}
-	err = c.putCatalog(pr)
-	assert.Nil(t, err)
-	assert.Equal(t, authorEntityID, catClient.putRq.Value.AuthorEntityId)
-	assert.Equal(t, readerEntityID, catClient.putRq.Value.ReaderEntityId)
-}
-
-func TestCourier_getEntityIDs_ok(t *testing.T) {
-	rng := rand.New(rand.NewSource(0))
-	authorPub, readerPub := util.RandBytes(rng, 33), util.RandBytes(rng, 33)
-	authorEntityID, readerEntityID := "author entity ID", "reader entity ID"
-
-	c, err := newCourier(okConfig)
-	assert.Nil(t, err)
-	c.key = &fixedKeyClient{
-		getPKD: []*keyapi.PublicKeyDetail{
-			{EntityId: authorEntityID},
-			{EntityId: readerEntityID},
-		},
-	}
-	gotAuthorID, gotReaderID, err := c.getEntityIDs(authorPub, readerPub)
-	assert.Nil(t, err)
-	assert.Equal(t, authorEntityID, gotAuthorID)
-	assert.Equal(t, readerEntityID, gotReaderID)
-}
-
-func TestCourier_getEntityIDs_err(t *testing.T) {
-	rng := rand.New(rand.NewSource(0))
-	authorPub, readerPub := util.RandBytes(rng, 33), util.RandBytes(rng, 33)
-
-	c, err := newCourier(okConfig)
-	assert.Nil(t, err)
-
-	// not found
-	rpErr := status.Error(codes.NotFound, keyapi.ErrNoSuchPublicKey.Error())
-	c.key = &fixedKeyClient{getPKDErr: rpErr}
-	gotAuthorID, gotReaderID, err := c.getEntityIDs(authorPub, readerPub)
-	assert.Nil(t, err)
-	assert.Empty(t, gotAuthorID)
-	assert.Empty(t, gotReaderID)
-
-	// other error
-	c.key = &fixedKeyClient{getPKDErr: errTest}
-	gotAuthorID, gotReaderID, err = c.getEntityIDs(authorPub, readerPub)
-	assert.Equal(t, errTest, err)
-	assert.Empty(t, gotAuthorID)
-	assert.Empty(t, gotReaderID)
 }
 
 type fixedPublisher struct {
@@ -393,6 +298,29 @@ func (r *fixedAccessRecorder) GetNextEvictions() ([][]byte, error) {
 	return r.nextEvictions, r.getEvictionBatchErr
 }
 
+type fixedCatalogPutter struct {
+	nMaybePuts  int
+	maybePutErr error
+	nPuts       int
+	putErr      error
+	mu          sync.Mutex
+}
+
+func (f *fixedCatalogPutter) maybePut(key []byte, value *libriapi.Document) error {
+	f.mu.Lock()
+	f.nMaybePuts++
+	f.mu.Unlock()
+	return f.maybePutErr
+}
+
+func (f *fixedCatalogPutter) put(pr *catalogapi.PublicationReceipt) error {
+	time.Sleep(10 * time.Millisecond) // simulate request time
+	f.mu.Lock()
+	f.nPuts++
+	f.mu.Unlock()
+	return f.putErr
+}
+
 type fixedCatalogClient struct {
 	putRq  *catalogapi.PutRequest
 	putRp  *catalogapi.PutResponse
@@ -446,5 +374,5 @@ func (f *fixedKeyClient) GetPublicKeyDetails(
 	if f.getPKDErr != nil {
 		return nil, f.getPKDErr
 	}
-	return &keyapi.GetPublicKeyDetailsResponse{PublicKeyDetails: f.getPKD}, f.getPKDErr
+	return &keyapi.GetPublicKeyDetailsResponse{PublicKeyDetails: f.getPKD}, nil
 }

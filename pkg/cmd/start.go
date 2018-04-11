@@ -26,10 +26,11 @@ const (
 	libriTimeoutFlag           = "libriTimeout"
 	nLibrarianPuttersFlag      = "nLibrarianPutters"
 	libriPutQueueSizeFlag      = "libriPutQueueSize"
-	gcpProjectIDFlag           = "gcpProjectID"
+	dbURLFlag                  = "dbURL"
+	dbPasswordFlag             = "dbPassword"
 	librariansFlag             = "librarians"
-	cacheMemoryStorageFlag     = "cacheMemoryStorage"
-	cacheDataStoreStorageFlag  = "cacheDataStoreStorage"
+	storageMemoryFlag          = "storageMemory"
+	storagePostgresFlag        = "storagePostgres"
 	cacheRecentWindowDaysFlag  = "cacheRecentWindowDays"
 	cacheLRUSizeFlag           = "cacheLRUSize"
 	cacheEvictionBatchSizeFlag = "cacheEvictionBatchSize"
@@ -82,12 +83,13 @@ func init() {
 		"number of workers Putting documents into libri")
 	startCmd.Flags().Uint(libriPutQueueSizeFlag, server.DefaultLibriPutQueueSize,
 		"size of the queue for documents to Put into libri")
-	startCmd.Flags().String(gcpProjectIDFlag, "", "GCP project ID")
+	startCmd.Flags().String(dbURLFlag, "", "Postgres DB URL, including username")
+	startCmd.Flags().String(dbPasswordFlag, "", "DB user's password")
 	startCmd.Flags().StringSlice(librariansFlag, []string{},
 		"space-separated libri librarian addresses")
-	startCmd.Flags().Bool(cacheMemoryStorageFlag, true,
+	startCmd.Flags().Bool(storageMemoryFlag, false,
 		"cache uses in-memory storage")
-	startCmd.Flags().Bool(cacheDataStoreStorageFlag, false,
+	startCmd.Flags().Bool(storagePostgresFlag, false,
 		"cache uses GCP DataStore storage")
 	startCmd.Flags().Int(cacheRecentWindowDaysFlag, storage.DefaultRecentWindowDays,
 		"recent past window in which cache entries are never evicted")
@@ -163,7 +165,7 @@ func getCourierConfig() (*server.Config, error) {
 		WithLibriPutTimeout(viper.GetDuration(libriTimeoutFlag)).
 		WithNLibriPutters(uint(viper.GetInt(nLibrarianPuttersFlag))).
 		WithLibriPutQueueSize(uint(viper.GetInt(libriPutQueueSizeFlag))).
-		WithGCPProjectID(viper.GetString(gcpProjectIDFlag)).
+		WithDBUrl(viper.GetString(dbURLFlag)).
 		WithLibrarianAddrs(librarianAddrs).
 		WithCache(cacheConfig).
 		WithCatalogAddr(catalogAddr).
@@ -180,13 +182,13 @@ func getCourierConfig() (*server.Config, error) {
 }
 
 func getCacheStorageType() (bstorage.Type, error) {
-	if viper.GetBool(cacheMemoryStorageFlag) && viper.GetBool(cacheDataStoreStorageFlag) {
+	if viper.GetBool(storageMemoryFlag) && viper.GetBool(storagePostgresFlag) {
 		return bstorage.Unspecified, errMultipleCacheStorageTypes
 	}
-	if viper.GetBool(cacheMemoryStorageFlag) {
+	if viper.GetBool(storageMemoryFlag) {
 		return bstorage.Memory, nil
 	}
-	if viper.GetBool(cacheDataStoreStorageFlag) {
+	if viper.GetBool(storagePostgresFlag) {
 		return bstorage.DataStore, nil
 	}
 	return bstorage.Unspecified, errNoStorageType

@@ -63,14 +63,18 @@ var (
 // Cache stores documents in a quasi-LRU cache. Implementations of this interface define how the
 // bstorage layer works.
 type Cache interface {
-	// Put stores the marshaled document value at the hex of its Key.
-	Put(key []byte, value []byte) error
+	// Put stores the marshaled document value at the hex of its Key. It returns a boolean flag
+	// for whether the key existed already.
+	Put(key []byte, value []byte) (bool, error)
 
 	// Get retrieves the marshaled document value of the given Key.
 	Get(key []byte) ([]byte, error)
 
 	// EvictNext removes the next batch of documents eligible for eviction from the cache.
 	EvictNext() error
+
+	// Close cleans up an resources held by the cache.
+	Close() error
 }
 
 // AccessRecorder records put and get access to a particular document.
@@ -103,7 +107,6 @@ type Parameters struct {
 	LRUCacheSize         uint
 	EvictionBatchSize    uint
 	EvictionPeriod       time.Duration
-	GetQueryTimeout      time.Duration
 	EvictionQueryTimeout time.Duration
 	GetTimeout           time.Duration
 	PutTimeout           time.Duration

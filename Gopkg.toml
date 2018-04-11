@@ -19,6 +19,30 @@
 #  name = "github.com/x/y"
 #  version = "2.4.0"
 
+[prune]
+  go-tests = true
+  non-go = true
+  unused-packages = true
+
+  [[prune.project]]
+    name = "github.com/elixirhealth/service-base"
+    non-go = false
+    unused-packages = false
+
+  [[prune.project]]
+    name = "github.com/tecbot/gorocksdb"
+    non-go = false
+    unused-packages = false
+
+  [[prune.project]]
+    name = "github.com/ethereum/go-ethereum"
+    non-go = false
+    unused-packages = false
+
+  [[prune.project]]
+    name = "github.com/drausin/libri"
+    non-go = false
+
 [[override]]
   name = "github.com/tecbot/gorocksdb"
   revision = "57a309fefefb9c03d6dcc11a0e5705fc4711b46d"

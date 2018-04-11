@@ -31,28 +31,28 @@ func New(params *storage.Parameters, logger *zap.Logger) (storage.Cache, storage
 }
 
 // Put stores the marshaled document value at the hex of its key.
-func (c *cache) Put(key []byte, value []byte) error {
+func (c *cache) Put(key []byte, value []byte) (bool, error) {
 	keyHex := hex.EncodeToString(key)
 	logger := c.logger.With(zap.String(logKey, keyHex))
 	logger.Debug("putting into cache")
 	if len(key) != storage.KeySize {
-		return storage.ErrInvalidKeySize
+		return false, storage.ErrInvalidKeySize
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if existing, in := c.docs[keyHex]; in {
 		if !bytes.Equal(value, existing) {
-			return storage.ErrExistingNotEqualNewValue
+			return true, storage.ErrExistingNotEqualNewValue
 		}
 		logger.Debug("cache already contains value")
-		return nil
+		return true, nil
 	}
 	c.docs[keyHex] = value
 	if err := c.ar.CachePut(key); err != nil {
-		return err
+		return false, err
 	}
 	logger.Debug("put into cache")
-	return nil
+	return false, nil
 }
 
 // Get retrieves the marshaled document value of the given hex key.
@@ -98,5 +98,10 @@ func (c *cache) EvictNext() error {
 		c.mu.Unlock()
 	}
 	c.logger.Info("evicted documents", zap.Int(logNEvicted, len(keys)))
+	return nil
+}
+
+// Close cleans up an resources held by the cache.
+func (c *cache) Close() error {
 	return nil
 }

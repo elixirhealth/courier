@@ -143,3 +143,10 @@ func TestConfig_WithKeyGetTimeout(t *testing.T) {
 	assert.NotEqual(t, c1.KeyGetTimeout,
 		c3.WithKeyGetTimeout(2*time.Second).KeyGetTimeout)
 }
+
+func TestConfig_WithDBUrl(t *testing.T) {
+	c1 := &Config{}
+	dbURL := "some DB URL"
+	c1.WithDBUrl(dbURL)
+	assert.Equal(t, dbURL, c1.DBUrl)
+}

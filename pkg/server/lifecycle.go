@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"math/big"
@@ -13,13 +12,13 @@ import (
 	libriapi "github.com/drausin/libri/libri/librarian/api"
 	"github.com/elixirhealth/catalog/pkg/catalogapi"
 	api "github.com/elixirhealth/courier/pkg/courierapi"
-	"github.com/elixirhealth/key/pkg/keyapi"
+	"github.com/elixirhealth/courier/pkg/server/storage/postgres/migrations"
 	"github.com/elixirhealth/service-base/pkg/server"
+	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
 	"github.com/golang/protobuf/proto"
+	bindata "github.com/mattes/migrate/source/go-bindata"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 const (
@@ -38,6 +37,10 @@ func Start(config *Config, up chan *Courier) error {
 		return err
 	}
 
+	if err = c.maybeMigrateDB(); err != nil {
+		return err
+	}
+
 	// start Courier aux routines
 	go c.startEvictor()
 	go c.startLibriPutters()
@@ -52,6 +55,21 @@ func Start(config *Config, up chan *Courier) error {
 func (c *Courier) StopServer() {
 	c.subscribeTo.End()
 	c.BaseServer.StopServer()
+	err := c.cache.Close()
+	cerrors.MaybePanic(err)
+}
+
+func (c *Courier) maybeMigrateDB() error {
+	if c.config.Storage.Type != bstorage.Postgres {
+		return nil
+	}
+
+	m := bstorage.NewBindataMigrator(
+		c.config.DBUrl,
+		bindata.Resource(migrations.AssetNames(), migrations.Asset),
+		&bstorage.ZapLogger{Logger: c.Logger},
+	)
+	return m.Up()
 }
 
 func (c *Courier) startEvictor() {
@@ -123,7 +141,7 @@ func (c *Courier) startLibriPutters() {
 					return
 				}
 				c.Logger.Debug("publishing document to libri",
-					zap.String(logDocKey, hex.EncodeToString(key)))
+					zap.String(logKey, hex.EncodeToString(key)))
 				docBytes, err := c.cache.Get(key)
 
 				msg = "error getting document from cache"
@@ -156,7 +174,7 @@ func (c *Courier) startLibriPutters() {
 				}
 
 				c.Logger.Info("published document to libri",
-					zap.Stringer(logDocKey, docKey),
+					zap.Stringer(logKey, docKey),
 				)
 			}
 		}(wg1, i)
@@ -175,6 +193,7 @@ func (c *Courier) startCatalogPutters() {
 	// monitor non-fatal errors, sending fatal err if too many
 	errs := make(chan error, 2*c.config.NCatalogPutters)  // non-fatal errs and nils
 	fatal := make(chan error, 2*c.config.NCatalogPutters) // signals fatal end
+	mu := new(sync.Mutex)
 	go cerrors.MonitorRunningErrors(errs, fatal, catalogPutterErrQueueSize,
 		catalogPutterMaxErrRate, c.Logger)
 	go func() {
@@ -187,7 +206,9 @@ func (c *Courier) startCatalogPutters() {
 		select {
 		case <-c.catalogPutQueue: // already closed
 		default:
+			mu.Lock()
 			close(c.catalogPutQueue)
+			mu.Unlock()
 		}
 	}()
 
@@ -201,82 +222,26 @@ func (c *Courier) startCatalogPutters() {
 				if c.BaseServer.State() >= server.Stopping {
 					return
 				}
-				err := c.putCatalog(&catalogapi.PublicationReceipt{
+				pr := &catalogapi.PublicationReceipt{
 					EnvelopeKey:     pub.EnvelopeKey,
 					EntryKey:        pub.EntryKey,
 					AuthorPublicKey: pub.AuthorPublicKey,
 					ReaderPublicKey: pub.ReaderPublicKey,
-				})
+				}
+				err := c.catalogPutter.put(pr)
 				if err != nil {
 					// add back onto queue so we don't drop it
+					mu.Lock()
 					if c.BaseServer.State() < server.Stopping {
 						c.catalogPutQueue <- kp
 					}
+					mu.Unlock()
 				}
 				errs <- err
 			}
 		}(wg1, i)
 	}
 	wg1.Wait()
-}
-
-func (c *Courier) putCatalog(pr *catalogapi.PublicationReceipt) error {
-	pr.ReceivedTime = time.Now().UnixNano() / 1E3
-	if pr.AuthorEntityId == "" || pr.ReaderEntityId == "" {
-		aEntityID, rEntityID, err := c.getEntityIDs(pr.AuthorPublicKey, pr.ReaderPublicKey)
-		if err != nil {
-			return err
-		}
-		pr.AuthorEntityId = aEntityID
-		pr.ReaderEntityId = rEntityID
-	}
-	rq := &catalogapi.PutRequest{Value: pr}
-	c.Logger.Debug("putting publication", logPutPublication(rq)...)
-	bo := newTimeoutExpBackoff(c.config.CatalogPutTimeout)
-	ctx, cancel := context.WithTimeout(context.Background(),
-		c.config.CatalogPutTimeout)
-	defer cancel()
-	op := func() error {
-		_, err := c.catalog.Put(ctx, rq)
-		return err
-	}
-	if err := backoff.Retry(op, bo); err != nil {
-		return err
-	}
-	c.Logger.Debug("put publication", logPutPublication(rq)...)
-	return nil
-}
-
-func (c *Courier) getEntityIDs(authorPub, readerPub []byte) (string, string, error) {
-	rq := &keyapi.GetPublicKeyDetailsRequest{
-		PublicKeys: [][]byte{authorPub, readerPub},
-	}
-	c.Logger.Debug("getting entity IDs", logGetEntityIDs(rq)...)
-	bo := newTimeoutExpBackoff(c.config.KeyGetTimeout)
-	ctx, cancel := context.WithTimeout(context.Background(),
-		c.config.KeyGetTimeout)
-	defer cancel()
-	var rp *keyapi.GetPublicKeyDetailsResponse
-	op := func() error {
-		var err error
-		rp, err = c.key.GetPublicKeyDetails(ctx, rq)
-		if err == nil || status.Convert(err).Code() == codes.NotFound {
-			return nil
-		}
-		c.Logger.Debug("error getting public key details", zap.Error(err))
-		return err
-	}
-	if err := backoff.Retry(op, bo); err != nil {
-		return "", "", err
-	}
-	if rp == nil {
-		c.Logger.Debug("entity IDs not found", logGetEntityIDs(rq)...)
-		return "", "", nil
-	}
-	authorEntityID := rp.PublicKeyDetails[0].EntityId
-	readerEntityID := rp.PublicKeyDetails[1].EntityId
-	c.Logger.Debug("got entity IDs", logGotEntityIDs(rq, rp)...)
-	return authorEntityID, readerEntityID, nil
 }
 
 func newTimeoutExpBackoff(timeout time.Duration) backoff.BackOff {
@@ -292,7 +257,7 @@ func (c *Courier) handleRunningErr(err error, errs chan error, logMsg string, ke
 	}
 	if err != nil {
 		c.Logger.Error(logMsg,
-			zap.String(logDocKey, hex.EncodeToString(key)),
+			zap.String(logKey, hex.EncodeToString(key)),
 			zap.Error(err),
 		)
 		return false

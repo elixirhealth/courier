@@ -334,17 +334,6 @@ func TestAccessRecorder_GetNextEvictions_err(t *testing.T) {
 				},
 			},
 		},
-		"evictable keys err err": {
-			params: params,
-			logger: lg,
-			qr: &fixedQuerier{
-				selectRowResult: &fixedRowScanner{val: 2},
-				selectResult: &fixedQueryRows{
-					next:   false,
-					errErr: errTest,
-				},
-			},
-		},
 		"evictable keys close err": {
 			params: params,
 			logger: lg,
@@ -353,6 +342,17 @@ func TestAccessRecorder_GetNextEvictions_err(t *testing.T) {
 				selectResult: &fixedQueryRows{
 					next:     false,
 					closeErr: errTest,
+				},
+			},
+		},
+		"evictable keys err err": {
+			params: params,
+			logger: lg,
+			qr: &fixedQuerier{
+				selectRowResult: &fixedRowScanner{val: 2},
+				selectResult: &fixedQueryRows{
+					next:   false,
+					errErr: errTest,
 				},
 			},
 		},

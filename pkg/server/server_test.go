@@ -11,7 +11,6 @@ import (
 	libriapi "github.com/drausin/libri/libri/librarian/api"
 	api "github.com/elixirhealth/courier/pkg/courierapi"
 	"github.com/elixirhealth/courier/pkg/server/storage"
-	"github.com/elixirhealth/key/pkg/keyapi"
 	"github.com/elixirhealth/service-base/pkg/server"
 	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
 	"github.com/golang/protobuf/proto"
@@ -65,54 +64,50 @@ func TestCourier_Put_ok(t *testing.T) {
 	}
 
 	// when Storage has value, Put request should leave existing
-	cc := &fixedCache{value: valueBytes}
+	cc := &fixedCache{putExists: true}
 	c := &Courier{
 		BaseServer:    server.NewBaseServer(server.NewDefaultBaseConfig()),
 		config:        NewDefaultConfig(),
 		cache:         cc,
-		catalog:       &fixedCatalogClient{},
-		key:           &fixedKeyClient{},
+		catalogPutter: &fixedCatalogPutter{},
 		libriPutQueue: make(chan []byte, 1),
 	}
-	rp, err := c.Put(context.Background(), rq)
+	_, err = c.Put(context.Background(), rq)
 	assert.Nil(t, err)
-	assert.Equal(t, api.PutOperation_LEFT_EXISTING, rp.Operation)
-	assert.Equal(t, key.Bytes(), cc.getKey)
+	assert.Equal(t, key.Bytes(), cc.putKey)
 
 	// when Storage doesn't have value, Put request should store in Storage and add
 	// to libriPutQueue queue
-	cc = &fixedCache{getErr: storage.ErrMissingValue}
-	catalog := &fixedCatalogClient{}
+	cc = &fixedCache{putExists: false}
+	cp := &fixedCatalogPutter{}
 	c = &Courier{
-		BaseServer: server.NewBaseServer(server.NewDefaultBaseConfig()),
-		config:     NewDefaultConfig(),
-		cache:      cc,
-		catalog:    catalog,
-		key: &fixedKeyClient{
-			getPKD: []*keyapi.PublicKeyDetail{
-				{EntityId: "some author ID"},
-				{EntityId: "some reader ID"},
-			},
-		},
+		BaseServer:    server.NewBaseServer(server.NewDefaultBaseConfig()),
+		config:        NewDefaultConfig(),
+		cache:         cc,
+		catalogPutter: cp,
 		libriPutQueue: make(chan []byte, 1),
 	}
-	rp, err = c.Put(context.Background(), rq)
+	_, err = c.Put(context.Background(), rq)
 	assert.Nil(t, err)
-	assert.Equal(t, api.PutOperation_STORED, rp.Operation)
-	assert.Equal(t, key.Bytes(), cc.getKey)
 	assert.Equal(t, key.Bytes(), cc.putKey)
 	assert.Equal(t, valueBytes, cc.value)
-	assert.Equal(t, 1, catalog.nPuts)
+	assert.Equal(t, 1, cp.nMaybePuts)
 	toPutKey := <-c.libriPutQueue
 	assert.Equal(t, key.Bytes(), toPutKey)
 }
 
 func TestCourier_Put_err(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
-	value, key := libriapi.NewTestDocument(rng)
+	doc := &libriapi.Document{
+		Contents: &libriapi.Document_Envelope{
+			Envelope: libriapi.NewTestEnvelope(rng),
+		},
+	}
+	key, err := libriapi.GetKey(doc)
+	assert.Nil(t, err)
 	okRq := &api.PutRequest{
 		Key:   key.Bytes(),
-		Value: value,
+		Value: doc,
 	}
 
 	cases := map[string]struct {
@@ -124,34 +119,30 @@ func TestCourier_Put_err(t *testing.T) {
 			rq: &api.PutRequest{},
 			c:  &Courier{},
 		},
-		"Storage Get error": {
-			rq: okRq,
-			c: &Courier{
-				cache: &fixedCache{getErr: errors.New("some Get error")},
-			},
-		},
-		"existing not equal new doc": {
-			rq: okRq,
-			c: &Courier{
-				cache: &fixedCache{value: []byte{1, 2, 3, 4}},
-			},
-			err: ErrExistingNotEqualNewDocument,
-		},
-		"Storage Put error": {
+		"cache Put error": {
 			rq: okRq,
 			c: &Courier{
 				cache: &fixedCache{
-					getErr: storage.ErrMissingValue,
-					putErr: errors.New("some Put error"),
+					putErr: errTest,
 				},
 			},
+			err: errTest,
+		},
+		"catalog put err": {
+			rq: okRq,
+			c: &Courier{
+				config:        NewDefaultConfig(),
+				cache:         &fixedCache{},
+				catalogPutter: &fixedCatalogPutter{maybePutErr: errTest},
+			},
+			err: errTest,
 		},
 		"full Libri put queue": {
 			rq: okRq,
 			c: &Courier{
-				cache: &fixedCache{
-					getErr: storage.ErrMissingValue,
-				},
+				config:        NewDefaultConfig(),
+				cache:         &fixedCache{},
+				catalogPutter: &fixedCatalogPutter{},
 				libriPutQueue: make(chan []byte), // no slack
 			},
 			err: ErrFullLibriPutQueue,
@@ -160,14 +151,14 @@ func TestCourier_Put_err(t *testing.T) {
 
 	for desc, c := range cases {
 		c.c.BaseServer = server.NewBaseServer(server.NewDefaultBaseConfig())
-		rp, err := c.c.Put(context.Background(), c.rq)
+		rp, err2 := c.c.Put(context.Background(), c.rq)
 		assert.Nil(t, rp, desc)
 		if c.err != nil {
 			// specific error
-			assert.Equal(t, c.err, err, desc)
+			assert.Equal(t, c.err, err2, desc)
 		} else {
 			// non-nil error
-			assert.NotNil(t, err, desc)
+			assert.NotNil(t, err2, desc)
 		}
 	}
 }
@@ -279,6 +270,7 @@ func TestCourier_Get_err(t *testing.T) {
 type fixedCache struct {
 	putKey       []byte
 	putErr       error
+	putExists    bool
 	getKey       []byte
 	getErr       error
 	evictErr     error
@@ -288,10 +280,10 @@ type fixedCache struct {
 	mu           sync.Mutex
 }
 
-func (f *fixedCache) Put(key []byte, value []byte) error {
+func (f *fixedCache) Put(key []byte, value []byte) (bool, error) {
 	f.putKey = key
 	f.value = value
-	return f.putErr
+	return f.putExists, f.putErr
 }
 
 func (f *fixedCache) Get(key []byte) ([]byte, error) {
@@ -313,6 +305,10 @@ func (f *fixedCache) EvictNext() error {
 	defer f.mu.Unlock()
 	f.evictCalls++
 	return f.evictNextErr
+}
+
+func (f *fixedCache) Close() error {
+	return nil
 }
 
 type fixedAcquirer struct {

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"math/rand"
@@ -13,12 +12,10 @@ import (
 	"github.com/drausin/libri/libri/common/subscribe"
 	libriapi "github.com/drausin/libri/libri/librarian/api"
 	"github.com/drausin/libri/libri/librarian/client"
-	"github.com/elixirhealth/catalog/pkg/catalogapi"
 	catalogclient "github.com/elixirhealth/catalog/pkg/client"
 	api "github.com/elixirhealth/courier/pkg/courierapi"
 	"github.com/elixirhealth/courier/pkg/server/storage"
 	keyclient "github.com/elixirhealth/key/pkg/client"
-	"github.com/elixirhealth/key/pkg/keyapi"
 	"github.com/elixirhealth/service-base/pkg/server"
 	"github.com/golang/protobuf/proto"
 	"go.uber.org/zap"
@@ -29,10 +26,6 @@ var (
 	// ErrDocumentNotFound indicates when a document is found in neither the Storage nor libri
 	// for a given key.
 	ErrDocumentNotFound = errors.New("document not found")
-
-	// ErrExistingNotEqualNewDocument indicates when existing cached document is not the same
-	// as the new document in a Put request.
-	ErrExistingNotEqualNewDocument = errors.New("existing does not equal new document")
 
 	// ErrFullLibriPutQueue indicates when the libri put queue is full.
 	ErrFullLibriPutQueue = errors.New("full libri Put queue")
@@ -56,11 +49,9 @@ type Courier struct {
 	libriPublisher publish.Publisher
 	libriPutQueue  chan []byte
 
-	catalog         catalogapi.CatalogClient
+	catalogPutter   catalogPutter
 	subscribeTo     subscribe.To
 	catalogPutQueue chan *subscribe.KeyedPub
-
-	key keyapi.KeyClient
 }
 
 // newCourier creates a new CourierServer from the given config.
@@ -108,19 +99,24 @@ func newCourier(config *Config) (*Courier, error) {
 	signer := client.NewSigner(clientID.Key())
 	catalogPutQueue := make(chan *subscribe.KeyedPub, config.CatalogPutQueueSize)
 	recentPubs, err := subscribe.NewRecentPublications(config.SubscribeTo.RecentCacheSize)
+	if err != nil {
+		return nil, err
+	}
 	subscribeTo := subscribe.NewTo(config.SubscribeTo, baseServer.Logger, clientID,
 		setLibClients, signer, recentPubs, catalogPutQueue)
-
 	pubParams := &publish.Parameters{
 		PutTimeout: config.LibriPutTimeout,
 		GetTimeout: config.LibriGetTimeout,
 	}
 	acquirer := publish.NewAcquirer(clientID, signer, pubParams)
 	publisher := publish.NewPublisher(clientID, signer, pubParams)
-
-	if err != nil {
-		return nil, err
+	cp := &catalogPutterImpl{
+		config:  config,
+		logger:  baseServer.Logger,
+		catalog: catalog,
+		key:     key,
 	}
+
 	return &Courier{
 		BaseServer: baseServer,
 		config:     config,
@@ -135,11 +131,9 @@ func newCourier(config *Config) (*Courier, error) {
 		libriPublisher: publisher,
 		libriPutQueue:  make(chan []byte, config.LibriPutQueueSize),
 
-		catalog:         catalog,
+		catalogPutter:   cp,
 		subscribeTo:     subscribeTo,
 		catalogPutQueue: catalogPutQueue,
-
-		key: key,
 	}, nil
 }
 
@@ -149,69 +143,23 @@ func (c *Courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 	if err := api.ValidatePutRequest(rq); err != nil {
 		return nil, err
 	}
-
-	// check Storage for value
-	cachedDocBytes, err := c.cache.Get(rq.Key)
-	if err != nil && err != storage.ErrMissingValue {
-		// unexpected error
-		return nil, err
-	}
 	newDocBytes, err := proto.Marshal(rq.Value)
-	cerrors.MaybePanic(err) // should never happen since we just unmarshaled from wire
-	if cachedDocBytes != nil {
-		// Storage has doc
-		if !bytes.Equal(newDocBytes, cachedDocBytes) {
-			// *should* never happen, but check just in case
-			return nil, ErrExistingNotEqualNewDocument
-		}
-		rp := &api.PutResponse{Operation: api.PutOperation_LEFT_EXISTING}
-		c.Logger.Info("put document", putDocumentFields(rq, rp)...)
-		return rp, nil
-	}
+	cerrors.MaybePanic(err)
 
-	// Storage doesn't have doc, so add it
-	if err = c.cache.Put(rq.Key, newDocBytes); err != nil {
-		return nil, err
+	if exists, err2 := c.cache.Put(rq.Key, newDocBytes); err2 != nil {
+		return nil, err2
+	} else if exists {
+		c.Logger.Info("left existing document", zap.String(logKey, id.Hex(rq.Key)))
+		return &api.PutResponse{}, nil
 	}
-	if err = c.maybePutCatalog(rq.Key, rq.Value); err != nil {
+	if err = c.catalogPutter.maybePut(rq.Key, rq.Value); err != nil {
 		return nil, err
 	}
 	if err = c.maybeAddLibriPutQueue(rq.Key); err != nil {
 		return nil, err
 	}
-	rp := &api.PutResponse{Operation: api.PutOperation_STORED}
-	c.Logger.Info("put document", putDocumentFields(rq, rp)...)
-	return rp, nil
-}
-
-func (c *Courier) maybePutCatalog(key []byte, value *libriapi.Document) error {
-	switch ct := value.Contents.(type) {
-	case *libriapi.Document_Envelope:
-		// create publication receipt for catalog from envelope
-		pr := &catalogapi.PublicationReceipt{
-			EnvelopeKey:     key,
-			EntryKey:        ct.Envelope.EntryKey,
-			AuthorPublicKey: ct.Envelope.AuthorPublicKey,
-			ReaderPublicKey: ct.Envelope.ReaderPublicKey,
-		}
-		if err := c.putCatalog(pr); err != nil {
-			return err
-		}
-	default:
-		// do nothing for Entry or Page
-	}
-	return nil
-}
-
-func (c *Courier) maybeAddLibriPutQueue(key []byte) error {
-	select {
-	case <-c.BaseServer.Stop:
-		return grpc.ErrServerStopped
-	case c.libriPutQueue <- key:
-		return nil
-	default:
-		return ErrFullLibriPutQueue
-	}
+	c.Logger.Info("put new document", zap.String(logKey, id.Hex(rq.Key)))
+	return &api.PutResponse{}, nil
 }
 
 // Get retrieves a value from the Storage or libri network, if it exists.
@@ -247,11 +195,22 @@ func (c *Courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse
 	}
 	docBytes, err = proto.Marshal(doc)
 	cerrors.MaybePanic(err) // should never happen since we just unmarshaled from wire
-	if err = c.cache.Put(rq.Key, docBytes); err != nil {
+	if _, err = c.cache.Put(rq.Key, docBytes); err != nil {
 		return nil, err
 	}
 	c.Logger.Info("returning value from libri", zap.String(logKey, id.Hex(rq.Key)))
 	return &api.GetResponse{
 		Value: doc,
 	}, nil
+}
+
+func (c *Courier) maybeAddLibriPutQueue(key []byte) error {
+	select {
+	case <-c.BaseServer.Stop:
+		return grpc.ErrServerStopped
+	case c.libriPutQueue <- key:
+		return nil
+	default:
+		return ErrFullLibriPutQueue
+	}
 }

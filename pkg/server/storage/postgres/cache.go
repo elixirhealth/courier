@@ -7,7 +7,7 @@ import (
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/drausin/libri/libri/common/errors"
-	stg "github.com/elixirhealth/courier/pkg/server/storage"
+	"github.com/elixirhealth/courier/pkg/server/storage"
 	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
 	"go.uber.org/zap"
 )
@@ -23,23 +23,23 @@ var (
 )
 
 type cache struct {
-	params  *stg.Parameters
+	params  *storage.Parameters
 	db      *sql.DB
 	dbCache sq.DBProxyContext
 	qr      bstorage.Querier
-	ar      stg.AccessRecorder
+	ar      storage.AccessRecorder
 	logger  *zap.Logger
 }
 
 // New creates a new Cache backed by a Postgres DB with the given db URL.
 func New(
-	dbURL string, params *stg.Parameters, logger *zap.Logger,
-) (stg.Cache, error) {
+	dbURL string, params *storage.Parameters, logger *zap.Logger,
+) (storage.Cache, storage.AccessRecorder, error) {
 	if dbURL == "" {
-		return nil, errEmptyDBUrl
+		return nil, nil, errEmptyDBUrl
 	}
 	if params.Type != bstorage.Postgres {
-		return nil, errUnexpectedStorageType
+		return nil, nil, errUnexpectedStorageType
 	}
 	db, err := sql.Open("postgres", dbURL)
 	errors.MaybePanic(err)
@@ -59,49 +59,44 @@ func New(
 		qr:      qr,
 		ar:      ar,
 		logger:  logger,
-	}, nil
+	}, ar, nil
 
 }
 
-// Put stores the marshaled document value at the hex of its Key.
-func (c *cache) Put(key []byte, value []byte) error {
-	if len(key) != stg.KeySize {
-		return stg.ErrInvalidKeySize
+// Put stores the marshaled document value at the hex of its Key
+func (c *cache) Put(key []byte, value []byte) (bool, error) {
+	if len(key) != storage.KeySize {
+		return false, storage.ErrInvalidKeySize
 	}
-	if len(value) > stg.MaxValueSize {
-		return stg.ErrValueTooLarge
+	if len(value) > storage.MaxValueSize {
+		return false, storage.ErrValueTooLarge
 	}
-	q1 := psql.RunWith(c.dbCache).
-		Select(count).
-		From(fqDocumentTable).
-		Where(sq.Eq{keyCol: key})
-	c.logger.Debug("checking in cache", logCacheGet(q1, key)...)
-	ctx, cancel := context.WithTimeout(context.Background(), c.params.GetTimeout)
-	row := c.qr.SelectQueryRowContext(ctx, q1)
-	cancel()
-	var exists int
-	if err := row.Scan(&exists); err != nil {
-		return err
-	}
-	hexKey := hex.EncodeToString(key)
-	if exists == 1 {
-		c.logger.Debug("cache already contains value", zap.String(logKey, hexKey))
-		return nil
-	}
-	q2 := psql.RunWith(c.dbCache).
+	q := psql.RunWith(c.dbCache).
 		Insert(fqDocumentTable).
 		SetMap(map[string]interface{}{
 			keyCol:   key,
 			valueCol: value,
-		})
+		}).
+		Suffix(onConflictDoNothing)
 	c.logger.Debug("putting into cache", logKeyValue(key, value)...)
-	ctx, cancel = context.WithTimeout(context.Background(), c.params.PutTimeout)
-	defer cancel()
-	if _, err := c.qr.InsertExecContext(ctx, q2); err != nil {
-		return err
+	ctx, cancel := context.WithTimeout(context.Background(), c.params.PutTimeout)
+	result, err := c.qr.InsertExecContext(ctx, q)
+	cancel()
+	if err != nil {
+		return false, err
+	}
+	nInserted, err := result.RowsAffected()
+	errors.MaybePanic(err) // should never happen w/ Postgres
+	if nInserted == 0 {
+		hexKey := hex.EncodeToString(key)
+		c.logger.Debug("cache already contains value", zap.String(logKey, hexKey))
+		return true, nil
+	}
+	if err = c.ar.CachePut(key); err != nil {
+		return false, err
 	}
 	c.logger.Debug("put into cache", logKeyValue(key, value)...)
-	return nil
+	return false, nil
 }
 
 // Get retrieves the marshaled document value of the given hex Key.
@@ -113,9 +108,14 @@ func (c *cache) Get(key []byte) ([]byte, error) {
 	c.logger.Debug("getting from cache", logCacheGet(q, key)...)
 	ctx, cancel := context.WithTimeout(context.Background(), c.params.GetTimeout)
 	row := c.qr.SelectQueryRowContext(ctx, q)
-	cancel()
+	defer cancel()
 	var value []byte
-	if err := row.Scan(&value); err != nil {
+	if err := row.Scan(&value); err != nil && err != sql.ErrNoRows {
+		return nil, err
+	} else if err == sql.ErrNoRows {
+		return nil, storage.ErrMissingValue
+	}
+	if err := c.ar.CacheGet(key); err != nil {
 		return nil, err
 	}
 	c.logger.Debug("got from cache", logKeyValue(key, value)...)
@@ -150,4 +150,9 @@ func (c *cache) EvictNext() error {
 	errors.MaybePanic(err) // should never happen w/ Postgres
 	c.logger.Debug("evicted documents", zap.Int(logNDeleted, int(nDeleted)))
 	return nil
+}
+
+// Close cleans up an resources held by the cache.
+func (c *cache) Close() error {
+	return c.db.Close()
 }

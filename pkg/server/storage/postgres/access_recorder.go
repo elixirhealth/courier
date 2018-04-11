@@ -113,11 +113,11 @@ func (ar *accessRecorder) GetNextEvictions() ([][]byte, error) {
 	ar.logger.Debug("finding evictable values", logEvictableQuery(q, beforeMin)...)
 	ctx, cancel := context.WithTimeout(context.Background(), ar.params.GetTimeout)
 	row := ar.qr.SelectQueryRowContext(ctx, q)
-	cancel()
 	var nEvictable int
 	if err := row.Scan(&nEvictable); err != nil {
 		return nil, err
 	}
+	cancel()
 	if nEvictable <= int(ar.params.LRUCacheSize) {
 		// don't evict anything since cache size smaller than size limit
 		ar.logger.Debug("fewer evictable values than cache size",
@@ -138,24 +138,25 @@ func (ar *accessRecorder) GetNextEvictions() ([][]byte, error) {
 	ar.logger.Debug("getting keys to evict", logEvictKeys(q, nToEvict)...)
 	ctx, cancel = context.WithTimeout(context.Background(), ar.params.GetTimeout)
 	rows, err := ar.qr.SelectQueryContext(ctx, q)
-	cancel()
+	defer cancel()
 	if err != nil {
 		return nil, err
 	}
-
 	keys := make([][]byte, nToEvict)
 	i := 0
 	for rows.Next() {
-		if err2 := rows.Scan(&keys[i]); err2 != nil {
-			return nil, err2
+		if err = rows.Scan(&keys[i]); err != nil {
+			err2 := rows.Close()
+			errors2.MaybePanic(err2)
+			return nil, err
 		}
 		i++
 	}
-	if err2 := rows.Close(); err2 != nil {
-		return nil, err2
+	if err = rows.Close(); err != nil {
+		return nil, err
 	}
-	if err2 := rows.Err(); err2 != nil {
-		return nil, err2
+	if err = rows.Err(); err != nil {
+		return nil, err
 	}
 
 	ar.logger.Debug("found evictable values", nextEvictionsFields(i, ar.params.LRUCacheSize)...)

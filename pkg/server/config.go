@@ -69,6 +69,7 @@ type Config struct {
 	KeyGetTimeout time.Duration
 
 	GCPProjectID string
+	DBUrl        string
 	Storage      *storage.Parameters
 }
 
@@ -313,5 +314,11 @@ func (c *Config) WithKeyGetTimeout(t time.Duration) *Config {
 // WithDefaultKeyGetTimeout sets the key Get request timeout to the default value.
 func (c *Config) WithDefaultKeyGetTimeout() *Config {
 	c.KeyGetTimeout = DefaultKeyGetTimeout
+	return c
+}
+
+// WithDBUrl sets the DB URL to the given value.
+func (c *Config) WithDBUrl(dbURL string) *Config {
+	c.DBUrl = dbURL
 	return c
 }

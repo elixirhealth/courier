@@ -58,15 +58,15 @@ func New(
 }
 
 // Put stores the marshaled document value at the hex of its Key.
-func (c *cache) Put(key []byte, value []byte) error {
+func (c *cache) Put(key []byte, value []byte) (bool, error) {
 	keyHex := hex.EncodeToString(key)
 	logger := c.logger.With(zap.String(logKey, keyHex))
 	logger.Debug("putting into cache")
 	if len(key) != storage.KeySize {
-		return storage.ErrInvalidKeySize
+		return false, storage.ErrInvalidKeySize
 	}
 	if len(value) > storage.MaxValueSize {
-		return storage.ErrValueTooLarge
+		return false, storage.ErrValueTooLarge
 	}
 	dsKey := datastore.NameKey(documentKind, keyHex, nil)
 	existingValue := &MarshaledDocument{}
@@ -74,31 +74,31 @@ func (c *cache) Put(key []byte, value []byte) error {
 	err := c.client.Get(ctx, dsKey, existingValue)
 	cancel()
 	if err != nil && err != datastore.ErrNoSuchEntity {
-		return err
+		return false, err
 	}
 	if err == nil {
 		// value exists
 		if !bytes.Equal(value, joinValue(existingValue)) {
-			return storage.ErrExistingNotEqualNewValue
+			return true, storage.ErrExistingNotEqualNewValue
 		}
 		logger.Debug("cache already contains value")
-		return nil
+		return true, nil
 	}
 	docValue, err := splitValue(value)
 	if err != nil {
-		return err
+		return false, err
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), c.params.PutTimeout)
 	if _, err = c.client.Put(ctx, dsKey, docValue); err != nil {
 		cancel()
-		return err
+		return false, err
 	}
 	cancel()
 	if err = c.accessRecorder.CachePut(key); err != nil {
-		return err
+		return false, err
 	}
 	logger.Debug("put into cache")
-	return nil
+	return false, nil
 }
 
 // Get retrieves the marshaled document value of the given hex Key.
@@ -148,6 +148,11 @@ func (c *cache) EvictNext() error {
 		return err
 	}
 	c.logger.Info("evicted documents", zap.Int(logNEvicted, len(dsKeys)))
+	return nil
+}
+
+// Close cleans up an resources held by the cache.
+func (c *cache) Close() error {
 	return nil
 }
 

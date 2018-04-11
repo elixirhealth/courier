@@ -44,15 +44,4 @@ message PutRequest {
     api.Document value = 2;
 }
 
-message PutResponse {
-    PutOperation operation = 1;
-}
-
-enum PutOperation {
-    // new value was added
-    STORED = 0;
-
-    // value already existed
-    LEFT_EXISTING = 1;
-}
-
+message PutResponse {}

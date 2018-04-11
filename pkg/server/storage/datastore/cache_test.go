@@ -36,12 +36,14 @@ func TestCache_PutGet_ok(t *testing.T) {
 		value1 := util.RandBytes(rng, valueSize)
 		key := util.RandBytes(rng, id.Length)
 
-		err := ds.Put(key, value1)
+		exists, err := ds.Put(key, value1)
 		assert.Nil(t, err)
+		assert.False(t, exists)
 
 		// put again just to see no-op
-		err = ds.Put(key, value1)
+		exists, err = ds.Put(key, value1)
 		assert.Nil(t, err)
+		assert.True(t, exists)
 
 		// check this internal side effect b/c it is important for eviction
 		accessLogValue1 := accessRecorderDSClient.value.(*storage.AccessRecord)
@@ -73,8 +75,9 @@ func TestCache_Put_err(t *testing.T) {
 		accessRecorder: &fixedAccessRecorder{},
 		logger:         lg,
 	}
-	err := ds.Put([]byte{1, 2, 3}, []byte{})
+	exists, err := ds.Put([]byte{1, 2, 3}, []byte{})
 	assert.Equal(t, storage.ErrInvalidKeySize, err)
+	assert.False(t, exists)
 
 	// get error
 	ds = &cache{
@@ -86,8 +89,9 @@ func TestCache_Put_err(t *testing.T) {
 		logger:         lg,
 	}
 	key := util.RandBytes(rng, id.Length)
-	err = ds.Put(key, []byte{})
+	exists, err = ds.Put(key, []byte{})
 	assert.NotNil(t, err)
+	assert.False(t, exists)
 
 	// different values for same Key
 	ds = &cache{
@@ -96,10 +100,12 @@ func TestCache_Put_err(t *testing.T) {
 		accessRecorder: &fixedAccessRecorder{},
 		logger:         lg,
 	}
-	err = ds.Put(key, []byte("value 1"))
+	exists, err = ds.Put(key, []byte("value 1"))
 	assert.Nil(t, err)
-	err = ds.Put(key, []byte("value 2"))
+	assert.False(t, exists)
+	exists, err = ds.Put(key, []byte("value 2"))
 	assert.Equal(t, storage.ErrExistingNotEqualNewValue, err)
+	assert.True(t, exists)
 
 	// value too large
 	ds = &cache{
@@ -108,8 +114,9 @@ func TestCache_Put_err(t *testing.T) {
 		accessRecorder: &fixedAccessRecorder{},
 		logger:         lg,
 	}
-	err = ds.Put(key, util.RandBytes(rng, 3.5*1024*1024))
+	exists, err = ds.Put(key, util.RandBytes(rng, 3.5*1024*1024))
 	assert.Equal(t, storage.ErrValueTooLarge, err)
+	assert.False(t, exists)
 
 	// doc put error
 	ds = &cache{
@@ -120,8 +127,9 @@ func TestCache_Put_err(t *testing.T) {
 		accessRecorder: &fixedAccessRecorder{},
 		logger:         lg,
 	}
-	err = ds.Put(key, util.RandBytes(rng, 1024))
+	exists, err = ds.Put(key, util.RandBytes(rng, 1024))
 	assert.NotNil(t, err)
+	assert.False(t, exists)
 
 	// access recorder error
 	ds = &cache{
@@ -132,8 +140,9 @@ func TestCache_Put_err(t *testing.T) {
 		},
 		logger: lg,
 	}
-	err = ds.Put(key, util.RandBytes(rng, 1024))
+	exists, err = ds.Put(key, util.RandBytes(rng, 1024))
 	assert.NotNil(t, err)
+	assert.False(t, exists)
 }
 
 func TestCache_Get_err(t *testing.T) {
