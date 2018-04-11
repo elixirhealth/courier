@@ -28,6 +28,7 @@ const (
 	logAuthorEntityID      = "author_entity_id"
 	logReaderEntityID      = "reader_entity_id"
 	logEnvelopeKey         = "envelope_key"
+	logErr                 = "err"
 )
 
 func logGetEntityIDs(rq *keyapi.GetPublicKeyDetailsRequest) []zapcore.Field {
