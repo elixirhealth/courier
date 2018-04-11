@@ -99,6 +99,9 @@ func newCourier(config *Config) (*Courier, error) {
 	signer := client.NewSigner(clientID.Key())
 	catalogPutQueue := make(chan *subscribe.KeyedPub, config.CatalogPutQueueSize)
 	recentPubs, err := subscribe.NewRecentPublications(config.SubscribeTo.RecentCacheSize)
+	if err != nil {
+		return nil, err
+	}
 	subscribeTo := subscribe.NewTo(config.SubscribeTo, baseServer.Logger, clientID,
 		setLibClients, signer, recentPubs, catalogPutQueue)
 	pubParams := &publish.Parameters{

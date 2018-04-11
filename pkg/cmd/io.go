@@ -22,10 +22,9 @@ import (
 )
 
 const (
-	nDocsFlag    = "nDocs"
-	timeoutFlag  = "timeout"
-	logKey       = "key"
-	logOperation = "operation"
+	nDocsFlag   = "nDocs"
+	timeoutFlag = "timeout"
+	logKey      = "key"
 )
 
 var ioCmd = &cobra.Command{

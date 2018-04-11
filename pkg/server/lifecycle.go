@@ -193,6 +193,7 @@ func (c *Courier) startCatalogPutters() {
 	// monitor non-fatal errors, sending fatal err if too many
 	errs := make(chan error, 2*c.config.NCatalogPutters)  // non-fatal errs and nils
 	fatal := make(chan error, 2*c.config.NCatalogPutters) // signals fatal end
+	mu := new(sync.Mutex)
 	go cerrors.MonitorRunningErrors(errs, fatal, catalogPutterErrQueueSize,
 		catalogPutterMaxErrRate, c.Logger)
 	go func() {
@@ -205,7 +206,9 @@ func (c *Courier) startCatalogPutters() {
 		select {
 		case <-c.catalogPutQueue: // already closed
 		default:
+			mu.Lock()
 			close(c.catalogPutQueue)
+			mu.Unlock()
 		}
 	}()
 
@@ -228,9 +231,11 @@ func (c *Courier) startCatalogPutters() {
 				err := c.catalogPutter.put(pr)
 				if err != nil {
 					// add back onto queue so we don't drop it
+					mu.Lock()
 					if c.BaseServer.State() < server.Stopping {
 						c.catalogPutQueue <- kp
 					}
+					mu.Unlock()
 				}
 				errs <- err
 			}
