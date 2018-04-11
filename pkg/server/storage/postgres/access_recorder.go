@@ -146,16 +146,15 @@ func (ar *accessRecorder) GetNextEvictions() ([][]byte, error) {
 	keys := make([][]byte, nToEvict)
 	i := 0
 	for rows.Next() {
-		if err2 := rows.Scan(&keys[i]); err2 != nil {
-			return nil, err2
+		if err = rows.Scan(&keys[i]); err != nil {
+			err2 := rows.Close()
+			errors2.MaybePanic(err2)
+			return nil, err
 		}
 		i++
 	}
-	if err2 := rows.Close(); err2 != nil {
-		return nil, err2
-	}
-	if err2 := rows.Err(); err2 != nil {
-		return nil, err2
+	if err = rows.Err(); err != nil {
+		return nil, err
 	}
 
 	ar.logger.Debug("found evictable values", nextEvictionsFields(i, ar.params.LRUCacheSize)...)

@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"testing"
 
+	libriapi "github.com/drausin/libri/libri/librarian/api"
 	"github.com/elixirhealth/catalog/pkg/catalogapi"
 	"github.com/elixirhealth/key/pkg/keyapi"
 	"github.com/elixirhealth/service-base/pkg/util"
@@ -12,6 +13,43 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+func TestCatalogPutterImpl_maybePut_ok(t *testing.T) {
+	rng := rand.New(rand.NewSource(0))
+	authorEntityID, readerEntityID := "author entity ID", "reader entity ID"
+
+	cc := &fixedCatalogClient{}
+	cp := &catalogPutterImpl{
+		config:  okConfig,
+		logger:  zap.NewNop(), // logging.NewDevLogger(zap.DebugLevel),
+		catalog: cc,
+		key: &fixedKeyClient{
+			getPKD: []*keyapi.PublicKeyDetail{
+				{EntityId: authorEntityID},
+				{EntityId: readerEntityID},
+			},
+		},
+	}
+
+	// putting non-envelope triggers nothing
+	doc, key := libriapi.NewTestDocument(rng)
+	err := cp.maybePut(key.Bytes(), doc)
+	assert.Nil(t, err)
+	assert.Equal(t, 0, cc.nPuts)
+
+	// putting envelope triggers catalog call
+	doc = &libriapi.Document{
+		Contents: &libriapi.Document_Envelope{
+			Envelope: libriapi.NewTestEnvelope(rng),
+		},
+	}
+	key, err = libriapi.GetKey(doc)
+	assert.Nil(t, err)
+
+	err = cp.maybePut(key.Bytes(), doc)
+	assert.Nil(t, err)
+	assert.Equal(t, 1, cc.nPuts)
+}
 
 func TestCatalogPutterImpl_put_ok(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
