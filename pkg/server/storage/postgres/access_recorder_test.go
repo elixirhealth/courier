@@ -12,6 +12,7 @@ import (
 
 	sq "github.com/Masterminds/squirrel"
 	errors2 "github.com/drausin/libri/libri/common/errors"
+	"github.com/drausin/libri/libri/common/logging"
 	"github.com/elixirhealth/courier/pkg/server/storage"
 	"github.com/elixirhealth/courier/pkg/server/storage/postgres/migrations"
 	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
@@ -269,7 +270,7 @@ func TestAccessRecorder_GetNextEvictions_ok(t *testing.T) {
 	params.Type = bstorage.Postgres
 	params.RecentWindowDays = 0
 	params.LRUCacheSize = 1
-	lg := zap.NewNop() // logging.NewDevLogger(zap.DebugLevel)
+	lg := logging.NewDevLogger(zap.DebugLevel)
 
 	ar, err := newAccessRecorder(dbURL, params, lg)
 	assert.Nil(t, err)
@@ -331,6 +332,17 @@ func TestAccessRecorder_GetNextEvictions_err(t *testing.T) {
 				selectResult: &fixedQueryRows{
 					next:    true,
 					scanErr: errTest,
+				},
+			},
+		},
+		"evictable keys close err": {
+			params: params,
+			logger: lg,
+			qr: &fixedQuerier{
+				selectRowResult: &fixedRowScanner{val: 2},
+				selectResult: &fixedQueryRows{
+					next:     false,
+					closeErr: errTest,
 				},
 			},
 		},

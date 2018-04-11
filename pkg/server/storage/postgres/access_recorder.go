@@ -138,11 +138,10 @@ func (ar *accessRecorder) GetNextEvictions() ([][]byte, error) {
 	ar.logger.Debug("getting keys to evict", logEvictKeys(q, nToEvict)...)
 	ctx, cancel = context.WithTimeout(context.Background(), ar.params.GetTimeout)
 	rows, err := ar.qr.SelectQueryContext(ctx, q)
-	cancel()
+	defer cancel()
 	if err != nil {
 		return nil, err
 	}
-
 	keys := make([][]byte, nToEvict)
 	i := 0
 	for rows.Next() {
@@ -152,6 +151,9 @@ func (ar *accessRecorder) GetNextEvictions() ([][]byte, error) {
 			return nil, err
 		}
 		i++
+	}
+	if err = rows.Close(); err != nil {
+		return nil, err
 	}
 	if err = rows.Err(); err != nil {
 		return nil, err
