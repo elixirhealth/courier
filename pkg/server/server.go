@@ -20,15 +20,20 @@ import (
 	"github.com/golang/protobuf/proto"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
 	// ErrDocumentNotFound indicates when a document is found in neither the Storage nor libri
 	// for a given key.
-	ErrDocumentNotFound = errors.New("document not found")
+	ErrDocumentNotFound = status.Error(codes.NotFound, "document not found")
 
 	// ErrFullLibriPutQueue indicates when the libri put queue is full.
 	ErrFullLibriPutQueue = errors.New("full libri Put queue")
+
+	// ErrInternal represents an internal error (e.g., with storage or dependency service call).
+	ErrInternal = status.Error(codes.Internal, "internal error")
 
 	errMissingCatalog = errors.New("missing catalog address")
 	errMissingKey     = errors.New("missing key address")
@@ -141,22 +146,26 @@ func newCourier(config *Config) (*Courier, error) {
 func (c *Courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse, error) {
 	c.Logger.Debug("received Put request", zap.String(logKey, id.Hex(rq.Key)))
 	if err := api.ValidatePutRequest(rq); err != nil {
-		return nil, err
+		c.Logger.Info("Put request invalid", zap.String(logErr, err.Error()))
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	newDocBytes, err := proto.Marshal(rq.Value)
 	cerrors.MaybePanic(err)
 
 	if exists, err2 := c.cache.Put(rq.Key, newDocBytes); err2 != nil {
-		return nil, err2
+		c.Logger.Error("cache Put error", zap.Error(err))
+		return nil, ErrInternal
 	} else if exists {
 		c.Logger.Info("left existing document", zap.String(logKey, id.Hex(rq.Key)))
 		return &api.PutResponse{}, nil
 	}
 	if err = c.catalogPutter.maybePut(rq.Key, rq.Value); err != nil {
-		return nil, err
+		c.Logger.Error("maybePut error", zap.Error(err))
+		return nil, ErrInternal
 	}
 	if err = c.maybeAddLibriPutQueue(rq.Key); err != nil {
-		return nil, err
+		c.Logger.Error("maybeAddLibriPutQueue error", zap.Error(err))
+		return nil, ErrInternal
 	}
 	c.Logger.Info("put new document", zap.String(logKey, id.Hex(rq.Key)))
 	return &api.PutResponse{}, nil
@@ -166,19 +175,22 @@ func (c *Courier) Put(ctx context.Context, rq *api.PutRequest) (*api.PutResponse
 func (c *Courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse, error) {
 	c.Logger.Debug("received Get request", zap.String(logKey, id.Hex(rq.Key)))
 	if err := api.ValidateGetRequest(rq); err != nil {
-		return nil, err
+		c.Logger.Info("Put request invalid", zap.String(logErr, err.Error()))
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	docBytes, err := c.cache.Get(rq.Key)
 	if err != nil && err != storage.ErrMissingValue {
 		// unexpected error
-		return nil, err
+		c.Logger.Error("cache Get error", zap.Error(err))
+		return nil, ErrInternal
 	}
 	if err == nil {
 		// Storage has doc
 		doc := &libriapi.Document{}
 		if err = proto.Unmarshal(docBytes, doc); err != nil {
-			return nil, err
+			c.Logger.Error("document proto unmarshal error", zap.Error(err))
+			return nil, ErrInternal
 		}
 		c.Logger.Info("returning value from cache", zap.String(logKey, id.Hex(rq.Key)))
 		return &api.GetResponse{Value: doc}, nil
@@ -188,15 +200,18 @@ func (c *Courier) Get(ctx context.Context, rq *api.GetRequest) (*api.GetResponse
 	keyID := id.FromBytes(rq.Key)
 	doc, err := c.libriAcquirer.Acquire(keyID, nil, c.libriGetter)
 	if err != nil && err != libriapi.ErrMissingDocument {
-		return nil, err
+		c.Logger.Error("libri acquire error", zap.Error(err))
+		return nil, ErrInternal
 	}
 	if err == libriapi.ErrMissingDocument {
+		c.Logger.Info("document not found in libri", zap.String(logKey, id.Hex(rq.Key)))
 		return nil, ErrDocumentNotFound
 	}
 	docBytes, err = proto.Marshal(doc)
 	cerrors.MaybePanic(err) // should never happen since we just unmarshaled from wire
 	if _, err = c.cache.Put(rq.Key, docBytes); err != nil {
-		return nil, err
+		c.Logger.Info("cache put error", zap.Error(err))
+		return nil, ErrInternal
 	}
 	c.Logger.Info("returning value from libri", zap.String(logKey, id.Hex(rq.Key)))
 	return &api.GetResponse{

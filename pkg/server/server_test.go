@@ -126,7 +126,7 @@ func TestCourier_Put_err(t *testing.T) {
 					putErr: errTest,
 				},
 			},
-			err: errTest,
+			err: ErrInternal,
 		},
 		"catalog put err": {
 			rq: okRq,
@@ -135,7 +135,7 @@ func TestCourier_Put_err(t *testing.T) {
 				cache:         &fixedCache{},
 				catalogPutter: &fixedCatalogPutter{maybePutErr: errTest},
 			},
-			err: errTest,
+			err: ErrInternal,
 		},
 		"full Libri put queue": {
 			rq: okRq,
@@ -145,7 +145,7 @@ func TestCourier_Put_err(t *testing.T) {
 				catalogPutter: &fixedCatalogPutter{},
 				libriPutQueue: make(chan []byte), // no slack
 			},
-			err: ErrFullLibriPutQueue,
+			err: ErrInternal,
 		},
 	}
 
