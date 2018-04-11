@@ -113,11 +113,11 @@ func (ar *accessRecorder) GetNextEvictions() ([][]byte, error) {
 	ar.logger.Debug("finding evictable values", logEvictableQuery(q, beforeMin)...)
 	ctx, cancel := context.WithTimeout(context.Background(), ar.params.GetTimeout)
 	row := ar.qr.SelectQueryRowContext(ctx, q)
-	cancel()
 	var nEvictable int
 	if err := row.Scan(&nEvictable); err != nil {
 		return nil, err
 	}
+	cancel()
 	if nEvictable <= int(ar.params.LRUCacheSize) {
 		// don't evict anything since cache size smaller than size limit
 		ar.logger.Debug("fewer evictable values than cache size",
