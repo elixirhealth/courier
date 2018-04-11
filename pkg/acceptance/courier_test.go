@@ -9,10 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"os/exec"
-	"path"
 	"path/filepath"
-	"syscall"
 	"testing"
 	"time"
 
@@ -25,23 +22,19 @@ import (
 	"github.com/elixirhealth/catalog/pkg/catalogapi"
 	catclient "github.com/elixirhealth/catalog/pkg/client"
 	catserver "github.com/elixirhealth/catalog/pkg/server"
-	catstorage "github.com/elixirhealth/catalog/pkg/server/storage"
 	"github.com/elixirhealth/courier/pkg/courierapi"
 	cserver "github.com/elixirhealth/courier/pkg/server"
 	"github.com/elixirhealth/courier/pkg/server/storage"
+	"github.com/elixirhealth/courier/pkg/server/storage/postgres/migrations"
 	keyclient "github.com/elixirhealth/key/pkg/client"
 	"github.com/elixirhealth/key/pkg/keyapi"
 	keyserver "github.com/elixirhealth/key/pkg/server"
-	keystorage "github.com/elixirhealth/key/pkg/server/storage"
 	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
 	"github.com/elixirhealth/service-base/pkg/util"
+	"github.com/mattes/migrate/source/go-bindata"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
-)
-
-const (
-	datastoreEmulatorHostEnv = "DATASTORE_EMULATOR_HOST"
 )
 
 type parameters struct {
@@ -52,8 +45,6 @@ type parameters struct {
 	nEntityPubKeys  int
 	getTimeout      time.Duration
 	putTimeout      time.Duration
-	gcpProjectID    string
-	datastoreAddr   string
 	libriLogLevel   zapcore.Level
 	catalogLogLevel zapcore.Level
 	keyLogLevel     zapcore.Level
@@ -76,6 +67,8 @@ type state struct {
 	rng               *rand.Rand
 	putDocs           []*api.Document
 	entityPubKeys     map[string]map[keyapi.KeyType][][]byte
+	dbURL             string
+	tearDownPostgres  func() error
 }
 
 func TestAcceptance(t *testing.T) {
@@ -87,23 +80,18 @@ func TestAcceptance(t *testing.T) {
 		nEntityPubKeys:  16,
 		getTimeout:      1 * time.Second,
 		putTimeout:      1 * time.Second,
-		gcpProjectID:    "dummy-courier-acceptance",
-		datastoreAddr:   "localhost:2001",
 		libriLogLevel:   zapcore.ErrorLevel,
 		catalogLogLevel: zapcore.ErrorLevel,
 		keyLogLevel:     zapcore.ErrorLevel,
 		courierLogLevel: zapcore.InfoLevel,
 	}
-	st := setUp(params)
-
-	// wait for datastore emulator to start
-	time.Sleep(5 * time.Second)
+	st := setUp(t, params)
 
 	addEntityPublicKeys(t, params, st)
 	testPut(t, params, st)
 	testGet(t, params, st)
 
-	tearDown(st)
+	tearDown(t, st)
 }
 
 func testPut(t *testing.T, params *parameters, st *state) {
@@ -130,11 +118,10 @@ func testPut(t *testing.T, params *parameters, st *state) {
 		client := st.courierClients[st.rng.Int31n(int32(len(st.courierClients)))]
 		rq := &courierapi.PutRequest{Key: key.Bytes(), Value: value}
 		ctx, cancel := context.WithTimeout(context.Background(), params.putTimeout)
-		rp, err := client.Put(ctx, rq)
+		_, err = client.Put(ctx, rq)
 		cancel()
 
 		assert.Nil(t, err)
-		assert.Equal(t, courierapi.PutOperation_STORED, rp.Operation)
 		time.Sleep(250 * time.Millisecond)
 	}
 	st.putDocs = putDocs
@@ -175,12 +162,18 @@ func testGet(t *testing.T, params *parameters, st *state) {
 	}
 }
 
-func setUp(params *parameters) *state {
-	st := &state{
-		rng: rand.New(rand.NewSource(0)),
+func setUp(t *testing.T, params *parameters) *state {
+	dbURL, cleanup, err := bstorage.StartTestPostgres()
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	startDatastoreEmulator(params, st)
+	st := &state{
+		rng:              rand.New(rand.NewSource(0)),
+		dbURL:            dbURL,
+		tearDownPostgres: cleanup,
+	}
+
 	createAndStartLibrarians(params, st)
 	createAndStartCatalog(params, st)
 	createAndStartKey(params, st)
@@ -288,24 +281,6 @@ func newLibrarianConfig(dataDir string, port int, logLevel zapcore.Level) *lserv
 		WithLogLevel(logLevel)
 }
 
-func startDatastoreEmulator(params *parameters, st *state) {
-	datastoreDataDir := path.Join(st.dataDir, "datastore")
-	cmd := exec.Command("gcloud", "beta", "emulators", "datastore", "start",
-		"--no-store-on-disk",
-		"--host-port", params.datastoreAddr,
-		"--project", params.gcpProjectID,
-		"--data-dir", datastoreDataDir,
-	)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err := cmd.Start()
-	errors.MaybePanic(err)
-	st.datastoreEmulator = cmd.Process
-	os.Setenv(datastoreEmulatorHostEnv, params.datastoreAddr)
-}
-
 func createAndStartCouriers(params *parameters, st *state) {
 	configs, addrs := newCourierConfigs(st, params)
 	couriers := make([]*cserver.Courier, params.nCouriers)
@@ -339,7 +314,7 @@ func newCourierConfigs(st *state, params *parameters) (
 
 	// set eviction params to ensure that evictions actually happen during test
 	cacheParams := storage.NewDefaultParameters()
-	cacheParams.Type = bstorage.DataStore
+	cacheParams.Type = bstorage.Postgres
 	cacheParams.LRUCacheSize = 4
 	cacheParams.EvictionBatchSize = 4
 	cacheParams.EvictionQueryTimeout = 5 * time.Second
@@ -353,7 +328,7 @@ func newCourierConfigs(st *state, params *parameters) (
 			WithCatalogAddr(st.catalogAddr).
 			WithKeyAddr(st.keyAddr).
 			WithCache(cacheParams).
-			WithGCPProjectID(params.gcpProjectID)
+			WithDBUrl(st.dbURL)
 		configs[i].WithServerPort(uint(serverPort)).
 			WithMetricsPort(uint(metricsPort)).
 			WithLogLevel(params.courierLogLevel)
@@ -363,7 +338,7 @@ func newCourierConfigs(st *state, params *parameters) (
 }
 
 func createAndStartCatalog(params *parameters, st *state) {
-	config, addr := newCatalogConfig(params)
+	config, addr := newCatalogConfig(params, st)
 	up := make(chan *catserver.Catalog, 1)
 
 	go func() {
@@ -379,14 +354,11 @@ func createAndStartCatalog(params *parameters, st *state) {
 	st.catalogClient = cl
 }
 
-func newCatalogConfig(params *parameters) (*catserver.Config, *net.TCPAddr) {
+func newCatalogConfig(params *parameters, st *state) (*catserver.Config, *net.TCPAddr) {
 	startPort := 10200
-	storageParams := catstorage.NewDefaultParameters()
-	storageParams.Type = bstorage.DataStore
 	serverPort, metricsPort := startPort, startPort+1
 	config := catserver.NewDefaultConfig().
-		WithStorage(storageParams).
-		WithGCPProjectID(params.gcpProjectID)
+		WithDBUrl(st.dbURL)
 	config.WithServerPort(uint(serverPort)).
 		WithMetricsPort(uint(metricsPort)).
 		WithLogLevel(params.catalogLogLevel)
@@ -413,12 +385,8 @@ func createAndStartKey(params *parameters, st *state) {
 
 func newKeyConfig(params *parameters) (*keyserver.Config, *net.TCPAddr) {
 	startPort := 10300
-	storageParams := keystorage.NewDefaultParameters()
-	storageParams.Type = bstorage.DataStore
 	serverPort, metricsPort := startPort, startPort+1
-	config := keyserver.NewDefaultConfig().
-		WithStorage(storageParams).
-		WithGCPProjectID(params.gcpProjectID)
+	config := keyserver.NewDefaultConfig()
 	config.WithServerPort(uint(serverPort)).
 		WithMetricsPort(uint(metricsPort)).
 		WithLogLevel(params.keyLogLevel)
@@ -426,7 +394,7 @@ func newKeyConfig(params *parameters) (*keyserver.Config, *net.TCPAddr) {
 	return config, addr
 }
 
-func tearDown(st *state) {
+func tearDown(t *testing.T, st *state) {
 
 	// stop services
 	for _, c := range st.couriers {
@@ -434,12 +402,6 @@ func tearDown(st *state) {
 	}
 	st.catalog.StopServer()
 	st.key.StopServer()
-
-	// stop datastore emulator
-	pgid, err := syscall.Getpgid(st.datastoreEmulator.Pid)
-	errors.MaybePanic(err)
-	err = syscall.Kill(-pgid, syscall.SIGKILL)
-	errors.MaybePanic(err)
 
 	// stop librarians
 	for _, p1 := range st.librarians {
@@ -452,6 +414,18 @@ func tearDown(st *state) {
 			errors.MaybePanic(err2)
 		}(p1)
 	}
+
+	logger := &bstorage.ZapLogger{Logger: logging.NewDevInfoLogger()}
+	m := bstorage.NewBindataMigrator(
+		st.dbURL,
+		bindata.Resource(migrations.AssetNames(), migrations.Asset),
+		logger,
+	)
+	err := m.Down()
+	assert.Nil(t, err)
+
+	err = st.tearDownPostgres()
+	assert.Nil(t, err)
 
 	// remove data dir shared by all
 	err = os.RemoveAll(st.dataDir)

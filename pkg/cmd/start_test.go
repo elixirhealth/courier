@@ -20,10 +20,10 @@ func TestGetCourierConfig(t *testing.T) {
 	libriTimeout := 10 * time.Second
 	nLibrarianPutters := 8
 	libriPutQueueSize := uint(32)
-	gcpProjectID := "some project"
+	dbURL := "some URL"
 	librarians := []string{"127.0.0.1:1234", "127.0.0.1:4567"}
-	cacheInMemoryStorage := false
-	cacheDataStoreStorage := true
+	storageMemory := false
+	storagePostgres := true
 	cacheRecentWindowDays := 2
 	cacheLRUSize := uint(1024)
 	cacheEvictionBatchSize := uint(32)
@@ -43,10 +43,10 @@ func TestGetCourierConfig(t *testing.T) {
 	viper.Set(libriTimeoutFlag, libriTimeout)
 	viper.Set(nLibrarianPuttersFlag, nLibrarianPutters)
 	viper.Set(libriPutQueueSizeFlag, libriPutQueueSize)
-	viper.Set(gcpProjectIDFlag, gcpProjectID)
+	viper.Set(dbURLFlag, dbURL)
 	viper.Set(librariansFlag, strings.Join(librarians, " "))
-	viper.Set(cacheMemoryStorageFlag, cacheInMemoryStorage)
-	viper.Set(cacheDataStoreStorageFlag, cacheDataStoreStorage)
+	viper.Set(storageMemoryFlag, storageMemory)
+	viper.Set(storagePostgresFlag, storagePostgres)
 	viper.Set(cacheRecentWindowDaysFlag, cacheRecentWindowDays)
 	viper.Set(cacheLRUSizeFlag, cacheLRUSize)
 	viper.Set(cacheEvictionBatchSizeFlag, cacheEvictionBatchSize)
@@ -68,7 +68,7 @@ func TestGetCourierConfig(t *testing.T) {
 	assert.Equal(t, libriTimeout, c.LibriPutTimeout)
 	assert.Equal(t, libriTimeout, c.LibriGetTimeout)
 	assert.Equal(t, libriPutQueueSize, c.LibriPutQueueSize)
-	assert.Equal(t, gcpProjectID, c.GCPProjectID)
+	assert.Equal(t, dbURL, c.DBUrl)
 	for i, l := range c.Librarians {
 		assert.Equal(t, librarians[i], l.String())
 	}
@@ -86,26 +86,26 @@ func TestGetCourierConfig(t *testing.T) {
 }
 
 func TestGetCacheStorageType(t *testing.T) {
-	viper.Set(cacheMemoryStorageFlag, true)
-	viper.Set(cacheDataStoreStorageFlag, false)
+	viper.Set(storageMemoryFlag, true)
+	viper.Set(storagePostgresFlag, false)
 	st, err := getCacheStorageType()
 	assert.Nil(t, err)
 	assert.Equal(t, bstorage.Memory, st)
 
-	viper.Set(cacheMemoryStorageFlag, false)
-	viper.Set(cacheDataStoreStorageFlag, true)
+	viper.Set(storageMemoryFlag, false)
+	viper.Set(storagePostgresFlag, true)
 	st, err = getCacheStorageType()
 	assert.Nil(t, err)
 	assert.Equal(t, bstorage.DataStore, st)
 
-	viper.Set(cacheMemoryStorageFlag, true)
-	viper.Set(cacheDataStoreStorageFlag, true)
+	viper.Set(storageMemoryFlag, true)
+	viper.Set(storagePostgresFlag, true)
 	st, err = getCacheStorageType()
 	assert.Equal(t, errMultipleCacheStorageTypes, err)
 	assert.Equal(t, bstorage.Unspecified, st)
 
-	viper.Set(cacheMemoryStorageFlag, false)
-	viper.Set(cacheDataStoreStorageFlag, false)
+	viper.Set(storageMemoryFlag, false)
+	viper.Set(storagePostgresFlag, false)
 	st, err = getCacheStorageType()
 	assert.Equal(t, errNoStorageType, err)
 	assert.Equal(t, bstorage.Unspecified, st)

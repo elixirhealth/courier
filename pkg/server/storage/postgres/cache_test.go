@@ -1,9 +1,11 @@
 package postgres
 
 import (
+	"context"
 	"math/rand"
 	"testing"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/drausin/libri/libri/common/id"
 	"github.com/elixirhealth/courier/pkg/server/storage"
 	bstorage "github.com/elixirhealth/service-base/pkg/server/storage"
@@ -24,7 +26,7 @@ func TestCache_PutGet_ok(t *testing.T) {
 	lg := zap.NewNop() // logging.NewDevLogger(zap.DebugLevel)
 	params := storage.NewDefaultParameters()
 	params.Type = bstorage.Postgres
-	c, err := New(dbURL, params, lg)
+	c, _, err := New(dbURL, params, lg)
 	assert.Nil(t, err)
 
 	valueSizes := []int{1024, 512 * 1024, 1024 * 1024, 2 * 1024 * 1024}
@@ -32,16 +34,40 @@ func TestCache_PutGet_ok(t *testing.T) {
 		value1 := util.RandBytes(rng, valueSize)
 		key := util.RandBytes(rng, id.Length)
 
-		err = c.Put(key, value1)
+		exists, err := c.Put(key, value1)
 		assert.Nil(t, err)
+		assert.False(t, exists)
 
 		// put again just to see no-op
-		err = c.Put(key, value1)
+		exists, err = c.Put(key, value1)
 		assert.Nil(t, err)
+		assert.True(t, exists)
 
 		value2, err2 := c.Get(key)
 		assert.Nil(t, err2)
 		assert.Equal(t, value1, value2)
+
+		cachePutCount := c.(*cache).qr.SelectQueryRowContext(context.Background(),
+			psql.RunWith(c.(*cache).dbCache).
+				Select(count).
+				From(fqAccessRecordTable).
+				Where(sq.Eq{keyCol: key, cachePutOccurredCol: true}),
+		)
+		var nPut int
+		err = cachePutCount.Scan(&nPut)
+		assert.Nil(t, err)
+		assert.Equal(t, 1, nPut)
+
+		cacheGetCount := c.(*cache).qr.SelectQueryRowContext(context.Background(),
+			psql.RunWith(c.(*cache).dbCache).
+				Select(count).
+				From(fqAccessRecordTable).
+				Where(sq.Eq{keyCol: key, cacheGetOccurredCol: true}),
+		)
+		var nGet int
+		err = cacheGetCount.Scan(&nGet)
+		assert.Nil(t, err)
+		assert.Equal(t, 1, nPut)
 	}
 }
 
@@ -78,29 +104,29 @@ func TestCache_Put_err(t *testing.T) {
 			value:    util.RandBytes(rng, storage.MaxValueSize+1),
 			expected: storage.ErrValueTooLarge,
 		},
-		"scan err": {
+		"insert err": {
 			c: &cache{
 				params: params,
 				logger: lg,
 				qr: &fixedQuerier{
-					selectRowResult: &fixedRowScanner{
-						err: errTest,
-					},
+					insertErr: errTest,
 				},
 			},
 			key:      okKey,
 			value:    okValue,
 			expected: errTest,
 		},
-		"insert err": {
+		"cache put err": {
 			c: &cache{
 				params: params,
 				logger: lg,
 				qr: &fixedQuerier{
-					selectRowResult: &fixedRowScanner{
-						val: 0,
+					insertResult: &fixedSQLResult{
+						rowsAffected: 1,
 					},
-					insertErr: errTest,
+				},
+				ar: &fixedAccessRecorder{
+					cachePutErr: errTest,
 				},
 			},
 			key:      okKey,
@@ -110,8 +136,9 @@ func TestCache_Put_err(t *testing.T) {
 	}
 
 	for desc, c := range cases {
-		err := c.c.Put(c.key, c.value)
+		exists, err := c.c.Put(c.key, c.value)
 		assert.Equal(t, c.expected, err, desc)
+		assert.False(t, exists)
 	}
 }
 
@@ -119,6 +146,7 @@ func TestCache_Get_err(t *testing.T) {
 	lg := zap.NewNop() // logging.NewDevLogger(zap.DebugLevel)
 	params := storage.NewDefaultParameters()
 	params.Type = bstorage.Postgres
+
 	c := &cache{
 		params: params,
 		logger: lg,

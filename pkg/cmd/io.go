@@ -80,16 +80,13 @@ func testIO() error {
 		c := courierClients[rng.Int31n(int32(len(courierClients)))]
 		rq := &courierapi.PutRequest{Key: key.Bytes(), Value: value}
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		rp, err2 := c.Put(ctx, rq)
+		_, err2 := c.Put(ctx, rq)
 		cancel()
 		if err2 != nil {
 			logger.Error("document put failed", zap.Error(err2))
 			return err2
 		}
-		logger.Info("document put succeeded",
-			zap.String(logKey, key.String()),
-			zap.String(logOperation, rp.Operation.String()),
-		)
+		logger.Info("document put succeeded", zap.String(logKey, key.String()))
 	}
 
 	for i := 0; i < nDocs; i++ {

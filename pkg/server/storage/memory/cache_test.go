@@ -26,12 +26,14 @@ func TestCache_PutGet_ok(t *testing.T) {
 		key := util.RandBytes(rng, id.Length)
 		keyHex := hex.EncodeToString(key)
 
-		err := c.Put(key, value1)
+		exists, err := c.Put(key, value1)
 		assert.Nil(t, err)
+		assert.False(t, exists)
 
 		// put again just to see no-op
-		err = c.Put(key, value1)
+		exists, err = c.Put(key, value1)
 		assert.Nil(t, err)
+		assert.True(t, exists)
 
 		// check this internal side effect b/c it is important for eviction
 		accessLogValue1 := ar.(*accessRecorder).records[keyHex]
@@ -59,16 +61,19 @@ func TestCache_Put_err(t *testing.T) {
 
 	// bad key
 	c, _ := New(storage.NewDefaultParameters(), lg)
-	err := c.Put([]byte{1, 2, 3}, []byte{})
+	exists, err := c.Put([]byte{1, 2, 3}, []byte{})
 	assert.Equal(t, storage.ErrInvalidKeySize, err)
+	assert.False(t, exists)
 
 	// different values for same key
 	c, _ = New(storage.NewDefaultParameters(), lg)
 	key := util.RandBytes(rng, id.Length)
-	err = c.Put(key, []byte("value 1"))
+	exists, err = c.Put(key, []byte("value 1"))
 	assert.Nil(t, err)
-	err = c.Put(key, []byte("value 2"))
+	assert.False(t, exists)
+	exists, err = c.Put(key, []byte("value 2"))
 	assert.Equal(t, storage.ErrExistingNotEqualNewValue, err)
+	assert.True(t, exists)
 
 	// access recorder error
 	ar := &fixedAccessRecorder{
@@ -79,8 +84,9 @@ func TestCache_Put_err(t *testing.T) {
 		docs:   make(map[string][]byte),
 		logger: lg,
 	}
-	err = c.Put(key, []byte("value 1"))
+	exists, err = c.Put(key, []byte("value 1"))
 	assert.NotNil(t, err)
+	assert.False(t, exists)
 }
 
 func TestCache_Get_err(t *testing.T) {
@@ -103,8 +109,9 @@ func TestCache_Get_err(t *testing.T) {
 		docs:   make(map[string][]byte),
 		logger: lg,
 	}
-	err = c.Put(key, []byte("value 1"))
+	exists, err := c.Put(key, []byte("value 1"))
 	assert.Nil(t, err)
+	assert.False(t, exists)
 	value, err = c.Get(key)
 	assert.NotNil(t, err)
 	assert.Nil(t, value)
